@@ -1383,18 +1383,25 @@ class anharmonic_mat_exp_implementation(object):
         rho_ex,
         A=None,
         e_At=None,
-        return_e_At_in_dict=False):
+        return_e_At_in_dict=False,
+        expm_method="loop",
+        ):
 
         """ Return shorthand B_n coefficient from Anda's paper
                 B_n = (i/hbar)^n * Tr{e^-iH_et [e^At]_[N-n, N] * rho_ex}
             """
     #     print(f"Inside Bn, t = {t}")
         if type(t) is np.ndarray:
+
             H_e = H_e[None, ...]
             t = t[:, None, None]
             if A is not None:
                 A = A[None, ...]
-            exp_func = loopy_expm
+            if expm_method == "loop":
+                exp_func = loopy_expm
+            elif expm_method == "eig":
+                exp_func = eigy_expm
+
     #         exp_func = lambda a: taylor_expm(a, 100)
         else:
             exp_func = lin.expm
@@ -1436,7 +1443,13 @@ class anharmonic_mat_exp_implementation(object):
         return Bn
 
 
-    def sum_of_cumulants(self, _t, H_e, rho_ex, A, cumulant_trunc_order=5):
+    def sum_of_cumulants(self,
+        _t,
+        H_e,
+        rho_ex,
+        A,
+        cumulant_trunc_order=5,
+        expm_method="loop"):
         """ Returns sum of Cumulants calculates using the matrix theorm implemetation """
         B_2_dict = self.big_b_tilde(
                 _t,
@@ -1445,7 +1458,9 @@ class anharmonic_mat_exp_implementation(object):
                 rho_ex=rho_ex,
                 A=A,
                 e_At=None,
-                return_e_At_in_dict=True)
+                return_e_At_in_dict=True,
+                expm_method=expm_method
+                )
         B_2 = B_2_dict['B_n']
         e_At = B_2_dict['e_At']
 #         print(f"e_At = {e_At}")
@@ -1460,12 +1475,12 @@ class anharmonic_mat_exp_implementation(object):
                 order_n=3,
                 H_e=H_e,
                 rho_ex=rho_ex,
-    #             A = A,
                 e_At=e_At,
+                expm_method=expm_method
                 )
 
             K_3 = B_3
-            exp_arg += K_3
+            exp_arg = exp_arg + K_3
 
         if cumulant_trunc_order >= 4:
             B_4 = self.big_b_tilde(
@@ -1473,13 +1488,14 @@ class anharmonic_mat_exp_implementation(object):
                 order_n=4,
                 H_e=H_e,
                 rho_ex=rho_ex,
-                e_At=e_At,)
-            K_4 += (
+                e_At=e_At,
+                expm_method=expm_method)
+            K_4 = (
                 B_4
                 -
                 (B_2**2)/2
                 )
-            exp_arg += K_4
+            exp_arg = exp_arg + K_4
 
         if cumulant_trunc_order >= 5:
 
@@ -1488,13 +1504,14 @@ class anharmonic_mat_exp_implementation(object):
                 order_n=5,
                 H_e=H_e,
                 rho_ex=rho_ex,
-                e_At=e_At,)
+                e_At=e_At,
+                expm_method=expm_method)
             K_5 = (
                 B_5
                 -
                 B_2*B_3
                 )
-            exp_arg += K_5
+            exp_arg = exp_arg + K_5
 
         if cumulant_trunc_order >= 6:
 
@@ -1503,7 +1520,8 @@ class anharmonic_mat_exp_implementation(object):
                 order_n=6,
                 H_e=H_e,
                 rho_ex=rho_ex,
-                e_At=e_At,)
+                e_At=e_At,
+                expm_method=expm_method)
 
             K_6 = (
                 B_6
@@ -1514,7 +1532,7 @@ class anharmonic_mat_exp_implementation(object):
                 +
                 (B_2**3)/3
                 )
-            exp_arg += K_6
+            exp_arg = exp_arg + K_6
 
         if cumulant_trunc_order >= 7:
 
@@ -1523,7 +1541,8 @@ class anharmonic_mat_exp_implementation(object):
                 order_n=7,
                 H_e=H_e,
                 rho_ex=rho_ex,
-                e_At=e_At,)
+                e_At=e_At,
+                expm_method=expm_method)
 
             K_7 = (
                 B_7
@@ -1537,7 +1556,7 @@ class anharmonic_mat_exp_implementation(object):
                     +
                     5/7 * K_5 * B_2)
                 )
-            exp_arg += K_7
+            exp_arg = exp_arg + K_7
 
         if cumulant_trunc_order >= 8:
 
@@ -1546,7 +1565,8 @@ class anharmonic_mat_exp_implementation(object):
                 order_n=8,
                 H_e=H_e,
                 rho_ex=rho_ex,
-                e_At=e_At,)
+                e_At=e_At,
+                expm_method=expm_method)
 
             K_8 = (
                 B_8
@@ -1562,7 +1582,7 @@ class anharmonic_mat_exp_implementation(object):
                     +
                     6/8 * K_6 * B_2)
                 )
-            exp_arg += K_8
+            exp_arg = exp_arg + K_8
 
         return exp_arg
 
@@ -1795,14 +1815,14 @@ class multi_mode_anharmonic_emission(anharmonic_mat_exp_implementation):
 
     def calculate_cumulants(self, _t, H_e, rho_ex, A, **kwargs):
 
-        if not hasattr(self, 'cum_sum'):
-            # print('_t = ', _t)
-            self.cum_sum = np.zeros((self.num_modes, len(_t),), dtype='complex')
-            # print('self.cum_sum.shape = ', self.cum_sum.shape)
-            # print('self.cum_sum.shape[0] = ', self.cum_sum.shape[0])
-            ## Calculate for each mode
-            for i in range(self.num_modes):
-                self.cum_sum[i] = self.sum_of_cumulants(_t, H_e[i], rho_ex[i], A[i], **kwargs)
+        # if not hasattr(self, 'cum_sum') or self.cum_order is cumulant_trunc_order:
+        # print('_t = ', _t)
+        self.cum_sum = np.zeros((self.num_modes, len(_t),), dtype='complex')
+        # print('self.cum_sum.shape = ', self.cum_sum.shape)
+        # print('self.cum_sum.shape[0] = ', self.cum_sum.shape[0])
+        ## Calculate for each mode
+        for i in range(self.num_modes):
+            self.cum_sum[i] = self.sum_of_cumulants(_t, H_e[i], rho_ex[i], A[i], **kwargs)
         else: pass
 
 
