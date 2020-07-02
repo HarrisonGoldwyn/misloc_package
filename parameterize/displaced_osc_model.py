@@ -1242,7 +1242,7 @@ class anharmonic_mat_exp_implementation(object):
     def calc_matricies(self, A_mat_order):
 
         self.H_g = (
-            self.vib_ham(self.poly_prefs_e, self.basis_size)
+            self.vib_ham(self.poly_prefs_g, self.basis_size)
             *self.hbar_omega_0
             )
 
@@ -1436,7 +1436,7 @@ class anharmonic_mat_exp_implementation(object):
         return Bn
 
 
-    def sum_of_cumulants(self, _t, H_e, rho_ex, A):
+    def sum_of_cumulants(self, _t, H_e, rho_ex, A, cumulant_trunc_order=5):
         """ Returns sum of Cumulants calculates using the matrix theorm implemetation """
         B_2_dict = self.big_b_tilde(
                 _t,
@@ -1449,65 +1449,135 @@ class anharmonic_mat_exp_implementation(object):
         B_2 = B_2_dict['B_n']
         e_At = B_2_dict['e_At']
 #         print(f"e_At = {e_At}")
-        B_3 = self.big_b_tilde(
-            _t,
-            order_n=3,
-            H_e=H_e,
-            rho_ex=rho_ex,
-#             A = A,
-            e_At=e_At,
-            )
-        B_4 = self.big_b_tilde(
-            _t,
-            order_n=4,
-            H_e=H_e,
-            rho_ex=rho_ex,
-            e_At=e_At,)
-        B_5 = self.big_b_tilde(
-            _t,
-            order_n=5,
-            H_e=H_e,
-            rho_ex=rho_ex,
-            e_At=e_At,)
-        B_6 = self.big_b_tilde(
-            _t,
-            order_n=6,
-            H_e=H_e,
-            rho_ex=rho_ex,
-            e_At=e_At,)
-#         print(f"B_2 = {B_2}")
-#         print(f"B_3 = {B_3}")
+
         exp_arg = (
             B_2
-            +
-            B_3
-            ## Stop here fore 3rd order Cum. expansion
-            +
-            B_4
-            -
-            (B_2**2)/2
-            ## Stop here for 4th order Cum. expansion
-            +
-            B_5
-            -
-            B_2*B_3
-            ## Stope here fore 5th order Cum. expansion
-            +
-            B_6
-            -
-            B_2*B_4
-            -
-            (B_3**2)/2
-            +
-            (B_2**3)/3
             )
+
+        if cumulant_trunc_order >= 3:
+            B_3 = self.big_b_tilde(
+                _t,
+                order_n=3,
+                H_e=H_e,
+                rho_ex=rho_ex,
+    #             A = A,
+                e_At=e_At,
+                )
+
+            K_3 = B_3
+            exp_arg += K_3
+
+        if cumulant_trunc_order >= 4:
+            B_4 = self.big_b_tilde(
+                _t,
+                order_n=4,
+                H_e=H_e,
+                rho_ex=rho_ex,
+                e_At=e_At,)
+            K_4 += (
+                B_4
+                -
+                (B_2**2)/2
+                )
+            exp_arg += K_4
+
+        if cumulant_trunc_order >= 5:
+
+            B_5 = self.big_b_tilde(
+                _t,
+                order_n=5,
+                H_e=H_e,
+                rho_ex=rho_ex,
+                e_At=e_At,)
+            K_5 = (
+                B_5
+                -
+                B_2*B_3
+                )
+            exp_arg += K_5
+
+        if cumulant_trunc_order >= 6:
+
+            B_6 = self.big_b_tilde(
+                _t,
+                order_n=6,
+                H_e=H_e,
+                rho_ex=rho_ex,
+                e_At=e_At,)
+
+            K_6 = (
+                B_6
+                -
+                B_2*B_4
+                -
+                (B_3**2)/2
+                +
+                (B_2**3)/3
+                )
+            exp_arg += K_6
+
+        if cumulant_trunc_order >= 7:
+
+            B_7 = self.big_b_tilde(
+                _t,
+                order_n=7,
+                H_e=H_e,
+                rho_ex=rho_ex,
+                e_At=e_At,)
+
+            K_7 = (
+                B_7
+                -
+                (
+                    2/7 * B_2 * B_5
+                    +
+                    3/7 * K_3 * B_4
+                    +
+                    4/7 * K_4 * B_3
+                    +
+                    5/7 * K_5 * B_2)
+                )
+            exp_arg += K_7
+
+        if cumulant_trunc_order >= 8:
+
+            B_8 = self.big_b_tilde(
+                _t,
+                order_n=8,
+                H_e=H_e,
+                rho_ex=rho_ex,
+                e_At=e_At,)
+
+            K_8 = (
+                B_8
+                -
+                (
+                    2/8 * B_2 * B_6
+                    +
+                    3/8 * K_3 * B_5
+                    +
+                    4/8 * K_4 * B_4
+                    +
+                    5/8 * K_5 * B_3
+                    +
+                    6/8 * K_6 * B_2)
+                )
+            exp_arg += K_8
 
         return exp_arg
 
 
-    def integrand(self, _t, omega, gamma, H_e, rho_ex, A, which_linespace='emission'):
+    def integrand(self,
+        _t,
+        omega,
+        gamma,
+        H_e,
+        rho_ex,
+        A,
+        which_linespace='emission',
+        **kwargs):
 
-        exp_arg = self.sum_of_cumulants(_t, H_e, rho_ex, A)
+        exp_arg = self.sum_of_cumulants(_t, H_e, rho_ex, A, **kwargs)
 
         ## Return integrand with time on last dimensions and omegas on
         ## first.
@@ -1723,7 +1793,7 @@ class multi_mode_anharmonic_emission(anharmonic_mat_exp_implementation):
             self.rho_e[i] = self.rho(self.H_e[i], self.T)
 
 
-    def calculate_cumulants(self, _t, H_e, rho_ex, A):
+    def calculate_cumulants(self, _t, H_e, rho_ex, A, **kwargs):
 
         if not hasattr(self, 'cum_sum'):
             # print('_t = ', _t)
@@ -1732,13 +1802,22 @@ class multi_mode_anharmonic_emission(anharmonic_mat_exp_implementation):
             # print('self.cum_sum.shape[0] = ', self.cum_sum.shape[0])
             ## Calculate for each mode
             for i in range(self.num_modes):
-                self.cum_sum[i] = self.sum_of_cumulants(_t, H_e[i], rho_ex[i], A[i])
+                self.cum_sum[i] = self.sum_of_cumulants(_t, H_e[i], rho_ex[i], A[i], **kwargs)
         else: pass
 
 
-    def integrand(self, _t, omega, gamma, H_e, rho_ex, A, isolate_mode=None, which_linespace='emission'):
+    def integrand(self,
+        _t,
+        omega,
+        gamma,
+        H_e,
+        rho_ex,
+        A,
+        isolate_mode=None,
+        which_linespace='emission',
+        **kwargs):
 
-        self.calculate_cumulants(_t, H_e, rho_ex, A)
+        self.calculate_cumulants(_t, H_e, rho_ex, A, **kwargs)
         ## Return integrand with time on last dimensions and omegas on
         ## first.
 
