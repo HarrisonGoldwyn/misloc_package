@@ -33,9 +33,9 @@ def cart_to_sphere(x, y, z):
     return sph_points
 
 def fib_alg_k_filter(num_points=100, max_ang=np.pi):
-    ''' generate evenly distributed points of sphere
-    using the fibonacci grid algorithm
-    '''
+    ''' Generate evenly distributed points of sphere
+        using the fibonacci grid algorithm.
+        '''
 
     ## determine total points across sphere if num_points in portion defined
     ## by max_ang
