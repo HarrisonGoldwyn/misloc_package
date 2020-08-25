@@ -138,6 +138,15 @@ def drude_model(w, eps_inf, w_p, gamma):
     eps = eps_inf - w_p**2./(w**2. + 1j*w*gamma)
     return eps
 
+def drude_lorentz_model(w, eps_inf, w_p, gamma, f_1, w_1):
+    ''' '''
+    eps = eps_inf - w_p**2. * (
+        (1-f_1)/(w**2. + 1j*w*gamma)
+        +
+        f_1/(w**2. + 1j*w*gamma - w_1**2.)
+        )
+    return eps
+
 def sparse_ellipsoid_polarizability_drude(w, eps_inf, w_p, gamma,
     eps_b, a_x, a_y, a_z):
     ''' '''
@@ -516,15 +525,10 @@ def sparse_sphere_polarizability_Mie(
     isolate_mode=None,
     ):
 
-    '''Follows Moroz, A. Depolarization field of spheroidal particles,
-        J. Opt. Soc. Am. B 26, 517
-        but differs in assuming that the long axis is x oriented
+    ''' Polarizability that results from the exact dipole Mie coefficient.
         '''
-    ### Define QS polarizability 'alphaR'
     def alphaTME_ii(a):
-        ''' returns components of alpha in diagonal basis with a_x denoting
-            long axis
-        '''
+        ''' returns components of alpha in diagonal basis '''
         eps_r = eps / eps_b
         m = np.sqrt(eps_r)
         k = w*np.sqrt(eps_b)/c
@@ -1196,6 +1200,31 @@ def sigma_abs_coupled(
         [interference_term_0, diag_term_0, interference_term_1, diag_term_1,]
         )*(4 * np.pi * k  / (np.abs(drive_amp)**2.))]
 
+def single_dip_sigma_scat(
+    dipoles_moments_per_omega,
+    drive_hbar_w,
+    n_b=None,
+    E_0=None,
+    ):
+    """ Scattering spectrum of two coupled dipoles p_0 and p_1. Derived from
+        Draine's prescription of the DDA.
+        """
+
+    omega = drive_hbar_w/hbar
+    k = omega * n_b / c
+
+    p_0, = dipoles_moments_per_omega(omega)
+
+    diag_term_0 = (2 / 3) * k**3 * np.abs(np.linalg.norm( p_0, axis=1 ))**2.
+
+    sigma = (
+        (4 * np.pi * k  / np.abs(E_0)**2.)
+        * diag_term_0
+        /n_b
+        )
+
+    return sigma
+
 
 def single_dip_absorption(
     mol_angle,
@@ -1365,6 +1394,45 @@ def coupled_dip_mags_both_driven(
     elif return_polarizabilities:
         return [p0, p1, alpha_0, alpha_1]
 
+def single_dip_mag_pw(
+    angle,
+    E_d_angle=None,
+    drive_hbar_w=None,
+    alpha0_diag=None,
+    n_b=None,
+    drive_amp=None,
+    return_polarizabilities=False,
+    ):
+    """ Calculate dipole magnitudes with generalized dyadic
+        polarizabilities.
+
+        Returns dipole moment vecotrs as rows in array of shape
+        (# of seperations, 3).
+        """
+
+    # Initialize unit vector for molecule dipole in lab frame
+    phi_0 = angle ## angle of bf_p0 in lab frame
+
+    if E_d_angle == None:
+        E_d_angle = angle
+    # rotate driving field into lab frame
+    E_drive = rotation_by(E_d_angle) @ np.array([1,0,0])*drive_amp
+
+    alpha_0_p0 = alpha0_diag
+    alpha_0 = rotation_by(-phi_0) @ alpha_0_p0 @ rotation_by(phi_0)
+
+    p0 = np.einsum(
+        '...ij,...j->...i',
+        alpha_0,
+        E_drive
+        )
+
+    if not return_polarizabilities:
+        return [p0,]
+    ## If using to compute absorption spectrum,
+    elif return_polarizabilities:
+        return [p0, alpha_0]
+
 
 def coupled_dip_mags_focused_beam(
     mol_angle,
@@ -1452,9 +1520,9 @@ def coupled_dip_mags_focused_beam(
     E_0 /= (beam_power)**0.5
     E_1 /= (beam_power)**0.5
 
-    print(f'np.sum(intensity_ofx) = {np.sum(intensity_ofx)}')
-    print(f'(2*spot_size)**2. = {(2*spot_size)**2.}')
-    print(f'beam_power = {beam_power}')
+    # print(f'np.sum(intensity_ofx) = {np.sum(intensity_ofx)}')
+    # print(f'(2*spot_size)**2. = {(2*spot_size)**2.}')
+    # print(f'beam_power = {beam_power}')
 
     ## Rotate polarizabilities into connecting vector frame
     alpha_0_p0 = alpha0_diag
@@ -1468,36 +1536,46 @@ def coupled_dip_mags_focused_beam(
     geometric_coupling_01 = np.linalg.inv(
         np.identity(3) - alpha_0 @ G_d @ alpha_1 @ G_d
         )
-    # print('geometric_coupling_01 = ',geometric_coupling_01)
-    # print('alpha_0 = ',alpha_0)
-    # print('alpha_1 = ',alpha_1)
-    # print('E_drive = ',E_drive)
 
-    p0 = (
-        np.einsum(
-            '...ij,...j->...i',
-            geometric_coupling_01 @ alpha_0,
-            E_0
-            )
-        +
-        np.einsum(
-            '...ij,...j->...i',
-            geometric_coupling_01 @ alpha_0 @ G_d @ alpha_1,
-            E_1
-            )
+    # p0 = (
+    #     np.einsum(
+    #         '...ij,...j->...i',
+    #         geometric_coupling_01 @ alpha_0,
+    #         E_0
+    #         )
+    #     +
+    #     np.einsum(
+    #         '...ij,...j->...i',
+    #         geometric_coupling_01 @ alpha_0 @ G_d @ alpha_1,
+    #         E_1
+    #         )
+    #     )
+    # p1 = (
+    #     np.einsum(
+    #         '...ij,...j->...i',
+    #         geometric_coupling_01 @ alpha_1,
+    #         E_1
+    #         )
+    #     +
+    #     np.einsum(
+    #         '...ij,...j->...i',
+    #         geometric_coupling_01 @ alpha_1 @ G_d @ alpha_0,
+    #         E_0
+    #         )
+    #     )
+    p0 = np.einsum(
+        '...ij,...j->...i',
+        geometric_coupling_01 @ alpha_0 @ (
+            np.identity(3) + G_d @ alpha_1
+            ),
+        E_0
         )
-    p1 = (
-        np.einsum(
-            '...ij,...j->...i',
-            geometric_coupling_01 @ alpha_1,
-            E_1
-            )
-        +
-        np.einsum(
-            '...ij,...j->...i',
-            geometric_coupling_01 @ alpha_1 @ G_d @ alpha_0,
-            E_0
-            )
+    p1 = np.einsum(
+        '...ij,...j->...i',
+        geometric_coupling_01 @ alpha_1 @ (
+            np.identity(3) + G_d @ alpha_0
+            ),
+        E_0
         )
 
     if not return_polarizabilities:
@@ -1506,13 +1584,135 @@ def coupled_dip_mags_focused_beam(
     elif return_polarizabilities:
         return [p0, p1, alpha_0, alpha_1]
 
+def single_dip_mag_focused_beam(
+    angle,
+    p0_position,
+    beam_x_positions,
+    E_d_angle=None,
+    drive_hbar_w=None,
+    alpha0_diag=None,
+    n_b=None,
+    drive_amp=None,
+    return_polarizabilities=False,
+    ):
+    """ Calculate dipole magnitude with generalized dyadic
+        polarizabilities driven by a focused dipole PSF beam.
+
+        Returns dipole moment vector as rows in array of shape
+        (# of seperations, # of beam positions, 3 cart. coords).
+
+        'p0_positions' is expected in shape
+            (3)
+
+        beam_x_positions is currelty just assuming a 1d slice, so it
+        should be shape
+            (number of points) on the x axis.
+
+        """
+
+    # Initialize unit vector for molecule dipole in lab frame
+    phi_0 = angle ## angle of bf_p0 in lab frame
+
+
+    k = (drive_hbar_w*n_b/hbar) / c
+
+    ## Define positions with shape (num_seperations, 3)
+    if p0_position.ndim is 1:
+        p0_position = p0_position[None, :]
+
+    ## Buld focused beam profile
+    E_0 = aff.E_field(
+        dipole_orientation_angle=E_d_angle,
+        xi=beam_x_positions - p0_position[...,0],
+        y=0,
+        k=k
+        ).T*drive_amp
+
+    ## Normalize fields to correct beam intensity
+    spot_size = 2*np.pi/k
+    spot_space = np.linspace(-spot_size, spot_size, 500)
+    spot_mesh = np.meshgrid(spot_space, spot_space)
+    focal_spot_field = aff.E_field(
+        dipole_orientation_angle=E_d_angle,
+        xi=spot_mesh[0],
+        y=spot_mesh[1],
+        k=k
+        ).T
+    intensity_ofx = c/(8*np.pi) * np.sum(
+        focal_spot_field*np.conj(focal_spot_field), axis=-1)
+
+    area_image = (spot_space.max() - spot_space.min())**2.
+    num_pixels = len(spot_space)**2.
+    area_per_pixel = area_image / num_pixels
+
+    beam_power = np.sum(intensity_ofx)*area_per_pixel
+    ## integral of (c/8pi)|E|^2 dA = beam_power
+    E_0 /= (beam_power)**0.5
+
+    ## Rotate polarizabilities into connecting vector frame
+    alpha_0_p0 = alpha0_diag
+    alpha_0 = rotation_by(-phi_0) @ alpha_0_p0 @ rotation_by(phi_0)
+
+    ## Dipole mmoment
+    p0 = np.einsum(
+        '...ij,...j->...i',
+        alpha_0,
+        E_0
+        )
+
+    if not return_polarizabilities:
+        return [p0]
+    ## If using to compute absorption spectrum,
+    elif return_polarizabilities:
+        return [p0, alpha_0]
+
+
+def partial_scattering(
+    max_angle,
+    p1_of_w,
+    x1,
+    hbar_w,
+    n_b,
+    E_0,
+    num_int_points=1000,
+    focal_l=1 #cm
+    ):
+    """ Returns fractional scattering crossection through aperature.
+        Args:
+            max_angle (float, radians): Maximum polar angle defining aperature dimension
+                and practically the bounds on the integral of the
+                Poynting vector.
+            p1_of_w (function): Takes frequency arg and returns array
+                of complex dipole magnitudes. shape = (..., 3)
+            x1: position of dipole
+            hbar_w: drive energy
+            n_b: background index
+            E_0: beam field magnitude
+        """
+    ## Define points on spheriacl section to evaluate fields
+    sph_coord_field_points = fib.fib_alg_k_filter(
+        num_points=num_int_points,
+        max_ang=max_angle
+        )
+    # Convert spherical coordinates to Caresian.
+    cart_points_on_sph = fib.sphere_to_cart(
+        sph_coord_field_points[:,0],
+        sph_coord_field_points[:,1],
+        focal_l*np.ones(np.shape(sph_coord_field_points[:,0]))
+        )
+    ## Define dipole fields
+    # E = G @ p
+    # H = ???
+    # S = E x H^*
+
+    ## Integrate
 
 
 
 
 if __name__ == "__main__":
 
-     print("This file is not meant to be executed")
+     print("This module is not meant to be executed")
 
 
 
