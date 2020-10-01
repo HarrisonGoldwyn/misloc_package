@@ -793,22 +793,26 @@ def dipole_mags_gened(
 
         Returns dipole moment vecotrs as rows in array of shape
         (# of seperations, 3).
-        """
 
-    # Initialize unit vector for molecule dipole in lab frame
-    phi_0 = mol_angle ## angle of bf_p0 in lab frame
+        Could implement 3D dipoles when 'mol_angle' is 2 dimensional."""
 
-    # Initialize unit vecotr for molecule dipole in lab frame
+
     phi_1 = plas_angle ## angle of bf_p1 in lab frame
 
-    if E_d_angle == None:
-        E_d_angle = mol_angle
-    # rotate driving field into lab frame
-    E_drive = rotation_by(E_d_angle) @ np.array([1,0,0])*drive_amp
+    alpha_0, E_drive = rotate_molecule(
+        mol_angle=mol_angle,
+        alpha0_diag=alpha0_diag,
+        E_d_angle=E_d_angle,
+        drive_amp=drive_amp,
+        )
 
-
-    alpha_0_p0 = alpha0_diag
-    alpha_0 = rotation_by(-phi_0) @ alpha_0_p0 @ rotation_by(phi_0)
+    print(f"alpha_0.shape = {alpha_0.shape}")
+    print(f"E_drive.shape = {E_drive.shape}")
+    print("Why???")
+    print(f"mol_angle.shape = {mol_angle.shape}")
+    print(f"alpha0_diag.shape = {alpha0_diag.shape}")
+    print(f"E_d_angle.shape = {E_d_angle}")
+    print(f"drive_amp.shape = {drive_amp}")
 
     alpha_1_p1 = alpha1_diag
     alpha_1 = rotation_by(-phi_1) @ alpha_1_p1 @ rotation_by(phi_1)
@@ -889,21 +893,38 @@ def plas_dip_driven_by_mol(
 
 
 ### older stuff in terms of effective masses and whatnot...
-def rotation_by(by_angle):
+def rotation_by(by_angle, rot_axis='z'):
     ''' need to vectorize '''
     if type(by_angle)==np.ndarray or type(by_angle)==list:
         R = np.zeros((by_angle.size,3,3))
-        cosines = np.cos(by_angle)
-        sines = np.sin(by_angle)
-        R[:,0,0] = cosines
-        R[:,0,1] = sines
-        R[:,1,0] = -sines
-        R[:,1,1] = cosines
-        R[:,2,2] = 1
     else:
-        R = np.array([[ np.cos(by_angle), np.sin(by_angle), 0],
-                      [-np.sin(by_angle), np.cos(by_angle), 0],
-                      [ 0,                0,                1]])
+        R = np.zeros((3,3))
+    cosines = np.cos(by_angle)
+    sines = np.sin(by_angle)
+
+    if rot_axis == 'z':
+        R[..., 0, 0] = cosines
+        R[..., 0, 1] = sines
+        R[..., 1, 0] = -sines
+        R[..., 1, 1] = cosines
+        R[..., 2, 2] = 1
+    elif rot_axis == 'y':
+        R[..., 2, 2] = cosines
+        R[..., 2, 0] = sines
+        R[..., 0, 2] = -sines
+        R[..., 0, 0] = cosines
+        R[..., 1, 1] = 1
+    elif rot_axis == 'x':
+        R[..., 1, 1] = cosines
+        R[..., 1, 2] = sines
+        R[..., 2, 1] = -sines
+        R[..., 2, 2] = cosines
+        R[..., 0, 0] = 1
+
+    # else:
+    #     R = np.array([[ np.cos(by_angle), np.sin(by_angle), 0],
+    #                   [-np.sin(by_angle), np.cos(by_angle), 0],
+    #                   [ 0,                0,                1]])
     return R
 
 
@@ -976,18 +997,11 @@ def uncoupled_p0(
     return_polarizability_tensor=False,
     ):
 
-    phi_0 = mol_angle ## angle of bf_p0
-
-    # phi_1 = plas_angle ## angle of bf_p1
-    # p1_hat = rotation_by(phi_1) @ np.array([1,0,0])
-
-    # phi_d = sep_angle ## angle of bf_d
-
-    if E_d_angle == None:
-        E_d_angle = mol_angle
-    E_drive = rotation_by(E_d_angle) @ np.array([1,0,0])*drive_amp
-
-    alpha_0 = rotation_by(-phi_0) @ alpha_0_p0 @ rotation_by(phi_0)
+    alpha_0, E_drive = rotate_molecule(
+        mol_angle=mol_angle,
+        alpha0_diag=alpha_0_p0,
+        E_d_angle=E_d_angle,
+        drive_amp=drive_amp)
 
     p0_unc = np.einsum('...ij,...j->...i', alpha_0, E_drive)
 
@@ -996,53 +1010,66 @@ def uncoupled_p0(
     else:
         return [p0_unc]
 
-# def uncoupled_p1(plas_angle, E_d_angle=None,
-#     drive_hbar_w=parameters['general']['drive_energy']
-#     ):
 
-#     # drive_hbar_w = parameters['general']['drive_energy']
-#     w = drive_hbar_w/hbar
-#     # w_res = w
-#     # gamma_nr = drude_damping_energy/hbar
-#     # eps_inf =
-#     n_b = parameters['general']['background_ref_index']
-#     eps_b = n_b**2.
+def rotate_molecule(mol_angle, alpha0_diag, E_d_angle, drive_amp):
+    """ Returns rotated polarizability tensor and driving field vector
+        """
+    if E_d_angle == None:
+        E_d_angle = mol_angle
 
-#     # phi_0 = mol_angle ## angle of bf_p0
-#     # p0_hat = rotation_by(phi_0) @ np.array([1,0,0])
+    # rotate driving field into lab frame
+    if np.asarray(E_d_angle).ndim == 2:
+        ## If two dimensional, start with z oriented dipole and rotate
+        ## to polar angle.
+        E_d_theta = E_d_angle[:, 0] ## 1D
+        E_d_phi = E_d_angle[:, 1] ## 1D
 
-#     phi_1 = plas_angle ## angle of bf_p1
-#     p1_hat = rotation_by(phi_1) @ np.array([1,0,0])
+        E_drive = np.array([0, 0, 1])*drive_amp
+        E_drive = rotation_by(E_d_theta, rot_axis='y') @ E_drive.T
+        print(f"E_drive.shape after y-rot = {E_drive.shape}")
+    else:
+        ## Otherize start with an x oriented dipole
+        E_drive = np.array([1, 0, 0])*drive_amp
+        E_d_phi = E_d_angle
+    ## Perform aximuthal rotation
+    print(f"rotation_by(E_d_phi).shape = {rotation_by(E_d_phi).shape}")
+    print(f"E_drive.shape = {E_drive.shape}")
+    E_drive = rotation_by(E_d_phi) @ E_drive.T
+    ## Take out an extra dimension introduced by np.matmul
+    if E_drive.shape[-1] == 1:
+        E_drive = E_drive[..., 0]
 
-#     # phi_d = sep_angle ## angle of bf_d
+    ## Build polarizability tensor for molecule
+    alpha_0_p0 = alpha0_diag
+    ## Decide if molecule is in focl plane or not by dimensions of
+    ## the 'mol_angle' arg.
+    if np.asarray(mol_angle).ndim <= 1:
+        phi_0 = mol_angle ## angle of bf_p0 in lab frame
+    else:
+        theta_0 = mol_angle[:, 0]
+        phi_0 = mol_angle[:, 1]
+        ## alpha0_diag arg assumes x axis is nonzero for molecule,
+        ## so first it must be rotated back to z by rotating -pi/2
+        ## about y-axis.
+        alpha_0_p0 = (
+            rotation_by(+np.pi/2, rot_axis='y')
+            @
+            alpha_0_p0
+            @
+            rotation_by(-np.pi/2, rot_axis='y')
+            )
+        ## Then we can rotate it by the given polar coordinates
+        alpha_0_p0 = (
+            rotation_by(-theta_0, rot_axis='y')
+            @
+            alpha_0_p0
+            @
+            rotation_by(+theta_0, rot_axis='y')
+            )
+    ## Then rotate molecule in aximuthal direction.
+    alpha_0 = rotation_by(-phi_0) @ alpha_0_p0 @ rotation_by(phi_0)
 
-#     if E_d_angle == None:
-#         E_d_angle = plas_angle
-#     E_drive = rotation_by(E_d_angle) @ np.array([1,0,0])*ficticious_field_amp
-
-#     alpha_1_p1 = sparse_polarizability_tensor(
-#         mass=parameters['plasmon']['fit_mass'],
-#         w_res=parameters['plasmon']['fit_hbar_w0']/hbar,
-#         w=w,
-#         gamma_nr=parameters['plasmon']['fit_hbar_gamma']/hbar,
-#         a = parameters['plasmon']['radius'],
-#         eps_inf=parameters['plasmon']['eps_inf'],
-#         eps_b=eps_b)
-#     alpha_1 = rotation_by(-phi_1) @ alpha_1_p1 @ rotation_by(phi_1)
-
-#     p1_unc = np.einsum('...ij,...j->...i',alpha_1, E_drive)
-
-#     return [p1_unc]
-
-
-
-
-
-
-
-
-
-
+    return alpha_0, E_drive
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1069,7 +1096,8 @@ def dipole_moments_per_omega(
     alpha0_diag = alpha0_diag_of_omega(drive_hbar_w/hbar)
     alpha1_diag = alpha1_diag_of_omega(drive_hbar_w/hbar)
 
-    p_0, p_1 = dipole_mags_gened(mol_angle,
+    p_0, p_1 = dipole_mags_gened(
+        mol_angle,
         plas_angle,
         d_col,
         # E_d_angle=None,
@@ -1183,7 +1211,7 @@ def sigma_abs_coupled(
     diag_term_1 = (2 / 3) * k**3 * np.abs(np.linalg.norm( p_1, axis=-1 ))**2.
 
     sigma = (
-        (4 * np.pi * k  / np.abs(drive_amp)**2.)
+        (4 * np.pi * (k)  / np.abs(drive_amp)**2.)
         *
         (
             interference_term_0
@@ -1198,7 +1226,7 @@ def sigma_abs_coupled(
 
     return [sigma, np.array(
         [interference_term_0, diag_term_0, interference_term_1, diag_term_1,]
-        )*(4 * np.pi * k  / (np.abs(drive_amp)**2.))]
+        )*(4 * np.pi * (k)  / (np.abs(drive_amp)**2.))]
 
 def single_dip_sigma_scat(
     dipoles_moments_per_omega,
@@ -1252,10 +1280,16 @@ def single_dip_absorption(
     omega = drive_hbar_w/hbar
     k = omega * n_b / c
 
-    diag_term = (2 / 3) * k**3 * np.abs(np.linalg.norm( p, axis=-1 ))**2.
+    diag_term = (
+        (2 / 3)
+        *
+        k**3
+        *
+        np.abs(np.linalg.norm( p, axis=-1 ))**2.
+        )
 
     sigma = (
-        (4 * np.pi * k  / np.abs(drive_amp)**2.)
+        (4 * np.pi * (k) / np.abs(drive_amp)**2.)
         *
         (
             interference_term
