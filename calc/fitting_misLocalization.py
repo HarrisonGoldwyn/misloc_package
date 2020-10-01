@@ -4,131 +4,65 @@ diffraction-limited images produced by a dipole emitter coupled to a
 plasmonic nanorod, modeled as a polarizable point dipole with
 polarizability of a prolate ellipsoid in the modified long wavelength
 approximation.
------------------------------------------------------------------------
-
-
------------
-Patch notes
------------
-
-02/06/19:
-    This file was renamed from
-    'fitting_misLocalization_adding_noise_to_modeled_images__011619v11'.
-    Currently hardcoded for a certain parameter file and fit
-    parameters. This will be changed in the future, but for now I just
-    want to get stuff done.
-
-02/07/19:
-    Hardcoded parameter file changed to vacuum values fit from BEM spectra
-    with built in.
-
-02/21/19:
-    Removed hardcoded dependence on .yaml file for plasmon and fluo
-    parameters. Leaving some bits that depend on the 'general'
-    parameters for now.
-
-03/06/19:
-    Added functionality to remove interference at initialization of
-    'MolCoupNanoRodExp' instance.
-
-    Sometime before this I also added functionality to isolate mode
-    effects... That happened in the last month.
-
-----
-TODO
-----
-
-- Want to eliminate hardcoded dependence to .yaml files.
-    - Should load physical constants from scipy, yaml file is pretty useless.
-
-    """
+"""
 from __future__ import print_function
 from __future__ import division
 
 import pdb
 import sys
 import os
-import numpy as np
-import scipy.optimize as opt
-from scipy import interpolate
-import scipy.io as sio
-import scipy.special as spf
 import yaml
 
+import numpy as np
+import scipy.optimize as opt
+import scipy.io as sio
+import scipy.special as spf
+from scipy import interpolate
 
-# sys.path.append(optics_path)
 from ..optics import diffraction_int as diffi
 from ..optics import fibonacci as fib
-
 
 ## Read parameter file to obtain fields
 from misloc_mispol_package import project_path
 
-parameter_files_path = (
-    project_path + '/param')
-
-# curly_yaml_file_name = '/curly_nrod_water_JC.yaml'
-# default_parameters = yaml.load(
-#     open(parameter_files_path+curly_yaml_file_name, 'r')
-#     )
-# print('reading parameters from {}'.format(
-#     parameter_files_path+curly_yaml_file_name
-#     )
-# )
-
-
 ## plotting stuff
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-
+#
+## colorbar stuff
+from mpl_toolkits import axes_grid1
+#
 mpl.rcParams['text.usetex'] = True
 mpl.rcParams["lines.linewidth"]
 
-## colorbar stuff
-from mpl_toolkits import axes_grid1
-
-
 ## analytic image fields
 from ..optics import anal_foc_diff_fields as afi
-
-## solution to coupled dipole problem
-# modules_path = project_path + '/solving_problems/modules'
-# sys.path.append(modules_path)
+## Coupled dipole analytics
 from . import coupled_dipoles as cp
 
+## Get path to directory for mispolariation mapping
 txt_file_path = project_path + '/txt'
 
 ## Import physical constants
 phys_const_file_name = '/physical_constants.yaml'
+parameter_files_path = (
+    project_path + '/param')
 opened_constant_file = open(
     parameter_files_path+phys_const_file_name,
     'r')
-
+#
 constants = yaml.load(opened_constant_file)
 e = constants['physical_constants']['e']
 c = constants['physical_constants']['c']  # charge of electron in statcoloumbs
 hbar = constants['physical_constants']['hbar']
 m_per_nm = constants['physical_constants']['nm']
 n_a = constants['physical_constants']['nA']   # Avogadro's number
-# Z_o = 376.7303 # impedence of free space in ohms (SI)
-
-## STOPPED HERE 02/21/19 5:00 PM. Removing parameters dependance
-## System background
-# n_b = default_parameters['general']['background_ref_index']
-# eps_b = n_b**2.
-
-
-# a = parameters['plasmon']['radius']
-
 
 # Draw the rod and ellipse
 curly_nanorod_color = (241/255, 223/255, 182/255)
 curly_nanorod_color_light = (241/255, 223/255, 182/255, 0.5)
 
-#######################################################################
-
-# height = 2*mm  # also defines objective lens focal length
-# height = parameters['optics']['obj_f_len']]
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def load_param_file(file_name):
     """ Load parameter .yaml"""
@@ -149,7 +83,6 @@ class DipoleProperties(object):
 
         11/21/19: Rewriting to take parameter file as input.
         """
-
 
     def __init__(self,
         param_file=None,
@@ -1856,7 +1789,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             self.plot_image_from_params(self.model_fit_results[image_idx], ax)
 
 # Old noisy class that has depreciated. I would like to build it on top
-# of the FitModelToData class
+# of the FitModelToData class. Going to leave it here now for the reminder.
 #
 # class FitModelToNoisedModel(FitModelToData,PlottableDipoles):
 
