@@ -685,10 +685,10 @@ class PlottableDipoles(DipoleProperties):
         draw_quadrant=True,):
 
         # For main quiver, plot relative mispolarization if true angle is given
-        if true_mol_angle is None:
-            true_mol_angle = angles
-        elif true_mol_angle is not None:
+        if true_mol_angle is not None:
             diff_angles = np.abs(angles - true_mol_angle)
+        else:
+            diff_angles = np.abs(angles)
 
         pt_is_in_ellip = np.ones(x_plot.shape, dtype=bool)
 
@@ -1013,31 +1013,30 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
             '''
 
         p = dipole_mag_array
+        print(f"p.shape = {p.shape}")
         # print('Inside mb_p_fields, p= ',p)
         bfx = dipole_coordinate_array
 
         v_rel_obs_x_pts = (self.obs_points[1].ravel()[:,None] - bfx.T[0]).T
         v_rel_obs_y_pts = (self.obs_points[2].ravel()[:,None] - bfx.T[1]).T
 
-        px_fields = np.asarray(
-            afi.E_field(
-                0,
-                v_rel_obs_x_pts,
-                v_rel_obs_y_pts,
-                (self.drive_energy_eV/hbar)*np.sqrt(self.eps_b)/c
-                )
+        px_fields = afi.E_field(
+            0,
+            v_rel_obs_x_pts,
+            v_rel_obs_y_pts,
+            (self.drive_energy_eV/hbar)*np.sqrt(self.eps_b)/c
             )
-        py_fields = np.asarray(
-            afi.E_field(
-                np.pi/2,
-                v_rel_obs_x_pts,
-                v_rel_obs_y_pts,
-                (self.drive_energy_eV/hbar)*np.sqrt(self.eps_b)/c
-                )
+        py_fields = afi.E_field(
+            np.pi/2,
+            v_rel_obs_x_pts,
+            v_rel_obs_y_pts,
+            (self.drive_energy_eV/hbar)*np.sqrt(self.eps_b)/c
             )
-        # This is not true, but does not matter as long as no dipoles have
-        # z components.
-        pz_fields = np.zeros(py_fields.shape)
+        pz_fields = afi.E_pz(
+            xi=v_rel_obs_x_pts,
+            y=v_rel_obs_y_pts,
+            k=(self.drive_energy_eV/hbar)*np.sqrt(self.eps_b)/c
+            )
 
         ## returns [Ex, Ey, Ez] for dipoles oriented along cart units
 
@@ -1104,25 +1103,25 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
             alpha_0_p0=self.alpha0_diag_dyad,
             drive_amp=self.drive_amp,
             )
-    #     print('p0.shape = ',p0.shape)
-    #     print('p1.shape = ',p1.shape)
-    #     print('p0_unc.shape = ',p0_unc.shape)
-    #     p0_unc_E = self.mb_p_fields(dipole_mag_array=p0_unc[None,:], dipole_coordinate_array=np.zeros(d[0][None,:].shape))
-        if type(mol_angle)==np.ndarray and mol_angle.shape[0]>1:
-            p0_unc_E = self.mb_p_fields(
-                dipole_mag_array=p0_unc,
-                dipole_coordinate_array=d
-                )
-        elif (
-            type(mol_angle) == int or
-            type(mol_angle) == float or
-            type(mol_angle) == np.float64 or
-            (type(mol_angle) == np.ndarray and mol_angle.shape[0]==1)
-            ):
-            p0_unc_E = self.mb_p_fields(
-                dipole_mag_array=p0_unc[None,:],
-                dipole_coordinate_array=d,
-                )
+
+        print(f"p1.shape = {p1.shape}")
+        print(f"p0_unc.shape = {p0_unc.shape}")
+
+        # if type(mol_angle)==np.ndarray and mol_angle.shape[0]>1:
+        p0_unc_E = self.mb_p_fields(
+            dipole_mag_array=p0_unc,
+            dipole_coordinate_array=d
+            )
+        # elif (
+        #     type(mol_angle) == int or
+        #     type(mol_angle) == float or
+        #     type(mol_angle) == np.float64 or
+        #     (type(mol_angle) == np.ndarray and mol_angle.shape[0]==1)
+        #     ):
+        #     p0_unc_E = self.mb_p_fields(
+        #         dipole_mag_array=p0_unc[None,:],
+        #         dipole_coordinate_array=d,
+        #         )
         # print(type(mol_angle))
         return [mol_E, plas_E, p0_unc_E, p0, p1]
 
@@ -1153,6 +1152,9 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
         exclude_interference=False,
         **kwargs
         ):
+        """ 'for_fit' arg simply turns off auto quenching within defined
+            quenching region.
+            """
         # Set up instance attributes
         self.exclude_interference = exclude_interference
         self.mol_locations = locations
@@ -1361,12 +1363,17 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
         if not hasattr(self, 'mispol_angle'):
             self.calculate_polarization()
 
+        if np.asarray(self.mol_angles.ndim) < 2:
+            mol_angles = self.mol_angles
+        else:
+            mol_angles = None
+
         quiv_ax, = self.quiver_plot(
             self.mol_locations[:,0],
             self.mol_locations[:,1],
             self.mispol_angle,
             plot_limits,
-            true_mol_angle=self.mol_angles,
+            true_mol_angle=mol_angles,
             nanorod_angle=self.rod_angle,
             title=r'Split Pol. and Gau. Fit Loc.',
             given_ax=given_ax,
