@@ -1,3 +1,7 @@
+"""
+Module for interacting with the MATLAB package MNPBEM17 for numerical
+electrodynamics simulations of plasmonic nanoparticles.
+"""
 from __future__ import print_function
 from __future__ import division
 
@@ -7,10 +11,9 @@ import yaml
 
 import numpy as np
 import scipy.optimize as opt
-from scipy import interpolate
 import scipy.io as sio
 import scipy.special as spf
-
+from scipy import interpolate
 
 from ..optics import diffraction_int as diffi
 from ..optics import fibonacci as fib
@@ -23,34 +26,17 @@ parameter_files_path = (
     project_path + '/param'
 )
 
-# curly_yaml_file_name = '/curly_nrod_water_JC.yaml'
-# parameters = yaml.load(open(parameter_files_path+curly_yaml_file_name,'r'))
-
-
-# modules_path = project_path + '/solving_problems/modules'
-# sys.path.append(modules_path)
-
 from . import fitting_misLocalization as fit
 
 ## plotting stuff
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-# get_ipython().magic('matplotlib inline')
-
-# mpl.rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
-## for Palatino and other serif fonts use:
-#rc('font',**{'family':'serif','serif':['Palatino']})
-# mpl.rcParams['text.usetex'] = True
 
 ## colorbar stuff
 from mpl_toolkits import axes_grid1
 
 ## Import analytic expressions for the focused fields from a point dipole.
 from ..optics import anal_foc_diff_fields as afi
-
-## Import computational solution to two coupled oscillators of arbitrarty
-## anisotropic polarizabilities.
-# import coupled_dipoles as cp
 
 ## Import physical constants from yaml file.
 phys_const_file_name = '/physical_constants.yaml'
@@ -64,46 +50,6 @@ hbar = constants['physical_constants']['hbar']
 nm = constants['physical_constants']['nm']
 n_a = constants['physical_constants']['nA']   # Avogadro's number
 m_per_nm = constants['physical_constants']['nm']
-# Z_o = 376.7303 # impedence of free space in ohms (SI)
-
-## Define some useful constants from defined parameters
-# n_b = parameters['general']['background_ref_index']
-# eps_b = n_b**2.
-# a = parameters['plasmon']['radius']
-
-
-
-#######################################################################
-## Optics stuff.
-# sensor_size = parameters['optics']['sensor_size']*nm
-# # height = 2*mm  # also defines objective lens focal length
-# # height = parameters['optics']['self.obj_f_len']
-# resolution = parameters['optics']['sensor_pts']  # image grid resolution
-# ## Build image sensor
-# eye = diffi.observation_points(
-#     x_min= -sensor_size/2,
-#     x_max= sensor_size/2,
-#     y_min= -sensor_size/2,
-#     y_max= sensor_size/2,
-#     points= resolution
-#     )
-
-# ## Experimental parameters
-# magnification = parameters['optics']['magnification']
-# numerical_aperture = parameters['optics']['numerical_aperture']
-# max_theta = np.arcsin(numerical_aperture) # defines physical aperture size
-
-# ## numerical parameters for calculation of scattered field
-# lens_points = parameters['optics']['lens_points']
-
-# # obj_f = 1.*mm  # still dont know what this is supposed to be
-# obj_f = parameters['optics']['obj_f_len']
-
-# self.tube_f = magnification * obj_f
-
-## calculate dipole magnitudes
-# drive_energy_eV = parameters['general']['drive_energy'] ## rod long mode max at 1.8578957289256757 eV
-# omega_drive = drive_energy_eV/hbar  # driving frequency
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -114,12 +60,13 @@ import traceback
 import warnings
 import sys
 
+## For debugging, uncomment to show full warning traceback.
 # def warn_with_traceback(message, category, filename, lineno, file=None, line=None):
-
+#
 #     log = file if hasattr(file,'write') else sys.stderr
 #     traceback.print_stack(file=log)
 #     log.write(warnings.formatwarning(message, category, filename, lineno, line))
-
+#
 # warnings.showwarning = warn_with_traceback
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -129,14 +76,6 @@ import sys
 import matlab
 import matlab.engine
 
-# Import from fit.
-# def fixed_ori_mol_placement(x_min=0, x_max=500, y_min=0, y_max=500, mol_grid_pts_1D = 3, mol_angle=0):
-#     locations = diffi.observation_points(x_min, x_max, y_min, y_max, points=mol_grid_pts_1D)[0]
-#     locations = np.hstack((locations,np.zeros((locations.shape[0],1))))
-
-#     mol_linspace_pts = mol_grid_pts_1D
-# #     random_mol_angles= (np.random.random(mol_linspace_pts**2)*np.pi*2)
-#     return [locations, mol_angle]
 
 class Simulation(fit.PlottableDipoles):
     """Runs BEM simulation
@@ -367,18 +306,7 @@ class Simulation(fit.PlottableDipoles):
                 np.cos(mol_angle),
                 np.sin(mol_angle),
                 0.,
-            ]
-
-
-            # print(f"\nmol_location input to BEM function:\n",
-            #     mol_location
-            #     )
-            # print(f"\nmol_orientation input to BEM function:\n",
-            #     mol_orientation
-            #     )
-            # print(f"\nmatlab_cart_points_on_sph input to BEM function:\n",
-            #     matlab_cart_points_on_sph
-            #     )
+                ]
 
             self.matlab_cart_points_on_sph = matlab_cart_points_on_sph
             # Run BEM calculation, return fields and coords.
