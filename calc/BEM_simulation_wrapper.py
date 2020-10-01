@@ -9,6 +9,12 @@ import sys
 import os
 import yaml
 
+## import matlab engine to run BEM
+import matlab
+import matlab.engine
+## Get path to MNPBEM17
+from misloc_mispol_package import path_to_dir_containing_mnpbem17
+
 import numpy as np
 import scipy.optimize as opt
 import scipy.io as sio
@@ -21,7 +27,7 @@ from ..optics import fibonacci as fib
 ## Read parameter file to obtain physical properties
 ## of molecule and plasmon, molecule and imaging system.
 from misloc_mispol_package import project_path
-
+## Find files for parameterizing dipoles and physical constants
 parameter_files_path = (
     project_path + '/param'
 )
@@ -68,13 +74,6 @@ import sys
 #     log.write(warnings.formatwarning(message, category, filename, lineno, line))
 #
 # warnings.showwarning = warn_with_traceback
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Setup warning tracker, not sure how useful this is in module...
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-## import matlab engine to run BEM
-import matlab
-import matlab.engine
 
 
 class Simulation(fit.PlottableDipoles):
@@ -240,6 +239,9 @@ class Simulation(fit.PlottableDipoles):
         # Add BEM to path
         eng.addpath(
             eng.genpath(project_path+'/matlab_bem', nargout=1),
+            nargout=0)
+        eng.addpath(
+            eng.genpath(path_to_dir_containing_mnpbem17, nargout=1),
             nargout=0)
 
         if self.simulation_type is None:
