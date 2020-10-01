@@ -1,29 +1,18 @@
-""" for python 3
-
-
-02/07/19:
-    Updated to work in new folder structure for git, paths are now hardcoded
-    and will later be set by instalation of Mislocalization package.
-
-
-Stopped updating notes when I started using git.
 """
-# import os
-# import sys
-# project_path = os.path.abspath(os.path.dirname(__file__))
-# sys.path.append(project_path)
-import scipy.special as spl
+Module for general electrodynamics of electric dipoles, their interactions, and observables.
+"""
 
 from misloc_mispol_package import project_path
 from misloc_mispol_package.optics import anal_foc_diff_fields as aff
 
+import numpy as np
+import scipy.special as spl
+
+import yaml
+
 parameter_files_path = (
     project_path + '/param'
 )
-# sys.path.append(parameter_files_path)
-
-import numpy as np
-import yaml
 
 phys_const_file_name = '/physical_constants.yaml'
 opened_constant_file = open(
@@ -32,43 +21,9 @@ opened_constant_file = open(
 constants = yaml.load(opened_constant_file)
 e = constants['physical_constants']['e']
 c = constants['physical_constants']['c']  # charge of electron in statcoloumbs
-hbar =constants['physical_constants']['hbar']
+hbar = constants['physical_constants']['hbar']
 nm = constants['physical_constants']['nm']
 n_a = constants['physical_constants']['nA']
-
-# curly_yaml_file_name = '/curly_nrod_water_JC.yaml'
-
-# print('reading parameters from {}'.format(
-#     parameter_files_path+curly_yaml_file_name
-#     )
-# )
-
-# opened_param_file = open(
-#     parameter_files_path+curly_yaml_file_name,'r'
-#     )
-# parameters = yaml.load(opened_param_file)
-# # print(curly_yaml_file_name)
-# ## System background
-# n_b = parameters['general']['background_ref_index']
-# eps_b = n_b**2.
-
-## Driving force
-# ficticious_field_amp = parameters['general']['drive_amp']
-
-# normalization = 1
-# print('polarizability reduced by factor of {}'.format(normalization))
-# print('coupling scaled up by by factor of {}'.format(normalization))
-
-
-
-# ## prototyping a class structure for a polarizable object.
-
-# class NanoParticle():
-#     # this is a metalic, polarizable nanoparticle
-#     # it is able to scatter incident light, and eventually will interacti with a molecule.
-
-#     def __init__(self):
-#         pass
 
 
 ## Adopted from old oscillator code
@@ -168,31 +123,9 @@ def sigma_scat_spheroid(w, eps_inf, w_p, gamma,
     return sigma
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-################### retarded ellipsoid from Kong's notes
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+## retarded ellipsoid from Kong's notes
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def sparse_ret_prolate_spheroid_polarizability(
     eps,
@@ -405,14 +338,6 @@ def short_sigma_scat_ret_pro_ellip(w, eps_inf, w_p, gamma,
     # print('(np.abs(alpha[0,0])**2. + np.abs(alpha[1,1])**2.) = ',
         # (np.abs(alpha[0,0])**2. + np.abs(alpha[1,1])**2.))
     return sigma
-
-###################
-
-
-
-
-
-
 
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -677,9 +602,11 @@ def sparse_ret_sphere_polarizability_Drude(w, eps_inf, w_p, gamma,
        isolate_mode,
        )
 
-###################
+
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ## Define scattering crossections for the 3 sphere models
-###################
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 def sigma_scat_ret_sphere(w, eps_inf, w_p, gamma,
     eps_b, a,):
     ''''''
@@ -751,29 +678,10 @@ def sigma_scat_TMatExp_sphere(w, eps_inf, w_p, gamma,
 #         # (np.abs(alpha[0,0])**2. + np.abs(alpha[1,1])**2.))
 #     return sigma
 
-###################
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-############################################################################
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ### Coupling stuff...
-############################################################################
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ### For generalized polarizabilities
 
@@ -930,16 +838,14 @@ def rotation_by(by_angle, rot_axis='z'):
 
 ## define coupling diad
 def G(drive_hbar_w, d_col, n_b):
-    ''' assumes input arrays:
-    drive_hbar_w : float
-    and vectors,
-    p1_hat.shape = (...,3)
-    p2_hat.shape = (...,3)
-    d_col.shape = (...,3) -> interpretable as ... number of row vectors
-    091218: should naivly operate on last dimension as cartesien vector
-    091218, 1629: realising this code computes p1 * G * p2, which is
-                  a scalar, really I want G.  --->  ^
-    '''
+    ''' Dipole relay tensor at frequency 'drive_hbar_w'/hbar, evaluated
+        at point specified by vector 'd_col' assuming the source dipole \
+        at origin. Background index is determined by
+
+        Arg details:
+            d_col.shape : shape = (...,3) -> interpretable as ...
+                number of row vectors.
+        '''
 
     d = vec_mag(d_col) ## returns shape = (...,1), preserves dimension
     n_hat = d_col/d ## returns shape = (...,3)
@@ -1571,32 +1477,6 @@ def coupled_dip_mags_focused_beam(
         np.identity(3) - alpha_0 @ G_d @ alpha_1 @ G_d
         )
 
-    # p0 = (
-    #     np.einsum(
-    #         '...ij,...j->...i',
-    #         geometric_coupling_01 @ alpha_0,
-    #         E_0
-    #         )
-    #     +
-    #     np.einsum(
-    #         '...ij,...j->...i',
-    #         geometric_coupling_01 @ alpha_0 @ G_d @ alpha_1,
-    #         E_1
-    #         )
-    #     )
-    # p1 = (
-    #     np.einsum(
-    #         '...ij,...j->...i',
-    #         geometric_coupling_01 @ alpha_1,
-    #         E_1
-    #         )
-    #     +
-    #     np.einsum(
-    #         '...ij,...j->...i',
-    #         geometric_coupling_01 @ alpha_1 @ G_d @ alpha_0,
-    #         E_0
-    #         )
-    #     )
     p0 = np.einsum(
         '...ij,...j->...i',
         geometric_coupling_01 @ alpha_0 @ (
