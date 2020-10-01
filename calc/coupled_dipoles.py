@@ -43,7 +43,6 @@ def sparse_polarizability_tensor(mass, w_res, w, gamma_nr, a, eps_inf, eps_b):
     gamma_r = gamma_nr + (2*e**2./(3*mass*c**3.))*w**2.
     alpha_0_xx_osc = (e**2. / mass)/(w_res**2. - w**2. - 1j*gamma_r*w)
     alpha_0_xx_static = (a**3. * (eps_inf - 1*eps_b)/(eps_inf + 2*eps_b))
-    # print('alpha_0_xx_static = ',alpha_0_xx_static)
     alpha_0_xx = alpha_0_xx_osc + alpha_0_xx_static
 
     if type(alpha_0_xx) is np.ndarray and alpha_0_xx.size > 1:
@@ -70,7 +69,7 @@ def sparse_ellipsoid_polarizability(eps, eps_b, a_x, a_y, a_z):
         integrand = 1/( (a**2. + q) * fq )
         integral = np.trapz(integrand, q)
         L_val = (a*b*c/2) * integral
-        # print('L_val= ',L_val)
+
         return L_val
 
     def alpha_ii(a, b, c):
@@ -117,9 +116,6 @@ def sigma_scat_spheroid(w, eps_inf, w_p, gamma,
     sigma = (8*np.pi/3)*(w/c)**4.*(np.abs(alpha[0,0])**2.
         # + np.abs(alpha[1,1])**2.
         )
-    # print('(8*np.pi/3)*(w/c)**4. = ',(8*np.pi/3)*(w/c)**4. )
-    # print('(np.abs(alpha[0,0])**2. + np.abs(alpha[1,1])**2.) = ',
-        # (np.abs(alpha[0,0])**2. + np.abs(alpha[1,1])**2.))
     return sigma
 
 
@@ -171,7 +167,7 @@ def sparse_ret_prolate_spheroid_polarizability(
             elif a_x < a_yz:
                 ## Use oblate spheroid result
                 L = (1/e**2.)*(1- (np.sqrt(1-e**2.)/e)*np.arcsin(e))
-            # print('L = ',L)
+
             return L
 
         def L_yz(a_x, a_yz):
@@ -205,7 +201,7 @@ def sparse_ret_prolate_spheroid_polarizability(
             - (k**2./l_E) * D * alphaR
             - 1j * ((2*k**3.)/3) * alphaR
             )
-        # print(f"alphaMW = {alphaMW}")
+
         return alphaMW
 
     ### Define dynamic geometric factors 'D_i' for alphaMW
@@ -223,13 +219,13 @@ def sparse_ret_prolate_spheroid_polarizability(
 
     def D_yz(a_x, a_yz):
         e = ecc(a_x, a_yz)
-        # print('e in D = ',e)
+
         if a_x > a_yz:
             D = (a_yz/(2*a_x))*(3/e * np.arctanh(e) - D_x(a_x,a_yz))
         elif a_x < a_yz:
             D = (a_yz/(2*a_x))*(
                 3*np.sqrt(1-e**2.)/e * np.arcsin(e) - D_x(a_x,a_yz))
-        # print('D = ',D)
+
         return D
 
     if a_x > a_yz:
@@ -277,7 +273,7 @@ def sparse_ret_prolate_spheroid_polarizability(
                 [       0.,       0., alpha_33]
                 ])
 
-    # print(f"The output variable is {alpha_ij}.")
+
     return alpha_ij
 
 
@@ -334,9 +330,6 @@ def short_sigma_scat_ret_pro_ellip(w, eps_inf, w_p, gamma,
     sigma = sigma_prefactor(w, eps_b) * (
         np.abs(alpha[1,1])**2.
         )
-    # print('(8*np.pi/3)*(w/c)**4. = ',(8*np.pi/3)*(w/c)**4. )
-    # print('(np.abs(alpha[0,0])**2. + np.abs(alpha[1,1])**2.) = ',
-        # (np.abs(alpha[0,0])**2. + np.abs(alpha[1,1])**2.))
     return sigma
 
 
@@ -714,14 +707,6 @@ def dipole_mags_gened(
         drive_amp=drive_amp,
         )
 
-    print(f"alpha_0.shape = {alpha_0.shape}")
-    print(f"E_drive.shape = {E_drive.shape}")
-    print("Why???")
-    print(f"mol_angle.shape = {mol_angle.shape}")
-    print(f"alpha0_diag.shape = {alpha0_diag.shape}")
-    print(f"E_d_angle.shape = {E_d_angle}")
-    print(f"drive_amp.shape = {drive_amp}")
-
     alpha_1_p1 = alpha1_diag
     alpha_1 = rotation_by(-phi_1) @ alpha_1_p1 @ rotation_by(phi_1)
 
@@ -730,10 +715,6 @@ def dipole_mags_gened(
     geometric_coupling_01 = np.linalg.inv(
         np.identity(3) - alpha_0 @ G_d @ alpha_1 @ G_d
         )
-    # print('geometric_coupling_01 = ',geometric_coupling_01)
-    # print('alpha_0 = ',alpha_0)
-    # print('alpha_1 = ',alpha_1)
-    # print('E_drive = ',E_drive)
 
     p0 = np.einsum('...ij,...j->...i',geometric_coupling_01 @ alpha_0, E_drive)
     p1 = np.einsum('...ij,...j->...i',alpha_1 @ G_d, p0)
@@ -854,10 +835,8 @@ def G(drive_hbar_w, d_col, n_b):
     k = w * n_b / c
 
     dyad = np.einsum('...i,...j->...ij',n_hat,n_hat)
-    # print(f'dyad.shape = {dyad.shape}')
 
     ## If 1 seperation is given, check if multable frequencies given for spectrum
-    # print(f'd.size = {d.size}')
     if d.size is not 1:
         d = d[...,None]
     elif d.size is 1 and (type(k) is np.ndarray):
@@ -884,9 +863,8 @@ def G(drive_hbar_w, d_col, n_b):
 
 ### ^ requires
 def vec_mag(row_vecs):
-    '''replace last dimension of array with normalized verion
-    '''
-    # print(row_vecs)
+    ''' Replace last dimension of array with normalized verion
+        '''
     vector_magnitudes = np.linalg.norm(row_vecs, axis=(-1))[:,None]  # breaks if mag == 0, ok?
     return vector_magnitudes
 
@@ -932,14 +910,12 @@ def rotate_molecule(mol_angle, alpha0_diag, E_d_angle, drive_amp):
 
         E_drive = np.array([0, 0, 1])*drive_amp
         E_drive = rotation_by(E_d_theta, rot_axis='y') @ E_drive.T
-        print(f"E_drive.shape after y-rot = {E_drive.shape}")
+
     else:
         ## Otherize start with an x oriented dipole
         E_drive = np.array([1, 0, 0])*drive_amp
         E_d_phi = E_d_angle
     ## Perform aximuthal rotation
-    print(f"rotation_by(E_d_phi).shape = {rotation_by(E_d_phi).shape}")
-    print(f"E_drive.shape = {E_drive.shape}")
     E_drive = rotation_by(E_d_phi) @ E_drive.T
     ## Take out an extra dimension introduced by np.matmul
     if E_drive.shape[-1] == 1:
@@ -1032,8 +1008,6 @@ def sigma_scat_coupled(
     k = omega * n_b / c
 
     p_0, p_1 = dipoles_moments_per_omega(omega)
-
-    # print(f'p_0, p_1 = {p_0, p_1}')
 
     G_d = G(drive_hbar_w, d_col, n_b)
 
@@ -1312,10 +1286,6 @@ def coupled_dip_mags_both_driven(
     geometric_coupling_01 = np.linalg.inv(
         np.identity(3) - alpha_0 @ G_d @ alpha_1 @ G_d
         )
-    # print('geometric_coupling_01 = ',geometric_coupling_01)
-    # print('alpha_0 = ',alpha_0)
-    # print('alpha_1 = ',alpha_1)
-    # print('E_drive = ',E_drive)
 
     p0 = np.einsum(
         '...ij,...j->...i',
@@ -1459,10 +1429,6 @@ def coupled_dip_mags_focused_beam(
     ## integral of (c/8pi)|E|^2 dA = beam_power
     E_0 /= (beam_power)**0.5
     E_1 /= (beam_power)**0.5
-
-    # print(f'np.sum(intensity_ofx) = {np.sum(intensity_ofx)}')
-    # print(f'(2*spot_size)**2. = {(2*spot_size)**2.}')
-    # print(f'beam_power = {beam_power}')
 
     ## Rotate polarizabilities into connecting vector frame
     alpha_0_p0 = alpha0_diag
