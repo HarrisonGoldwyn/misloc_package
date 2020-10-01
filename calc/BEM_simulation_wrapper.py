@@ -13,7 +13,7 @@ import yaml
 import matlab
 import matlab.engine
 ## Get path to MNPBEM17
-from misloc_mispol_package import path_to_dir_containing_mnpbem17
+from misloc_mispol_package import path_to_mnpbem17
 
 import numpy as np
 import scipy.optimize as opt
@@ -241,7 +241,7 @@ class Simulation(fit.PlottableDipoles):
             eng.genpath(project_path+'/matlab_bem', nargout=1),
             nargout=0)
         eng.addpath(
-            eng.genpath(path_to_dir_containing_mnpbem17, nargout=1),
+            eng.genpath(path_to_mnpbem17, nargout=1),
             nargout=0)
 
         if self.simulation_type is None:
