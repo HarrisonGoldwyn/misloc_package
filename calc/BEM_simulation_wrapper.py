@@ -110,6 +110,7 @@ class Simulation(fit.PlottableDipoles):
         simulation_type=None,
         simulation_file_name=None,
         param_file=None,
+        auto_quench=True,
         **kwargs
         ):
 
@@ -135,12 +136,16 @@ class Simulation(fit.PlottableDipoles):
         self.input_y_mol = locations[:,1]
 
         self.pt_is_in_ellip = self.mol_too_close()
-        ## select molecules outside region,
-        self.mol_locations = locations[self.pt_is_in_ellip]
         ## select molecule angles if listed per molecule,
-        if type(mol_angle)==np.ndarray and mol_angle.shape[0]>1:
-            self.mol_angles = mol_angle[self.pt_is_in_ellip]
-        else: self.mol_angles = mol_angle
+        if auto_quench:
+            ## select molecules outside region,
+            self.mol_locations = locations[self.pt_is_in_ellip]
+
+            if type(mol_angle)==np.ndarray and mol_angle.shape[0]>1:
+                self.mol_angles = mol_angle[self.pt_is_in_ellip]
+        else:
+            self.mol_locations = locations
+            self.mol_angles = mol_angle
 
         self.default_plot_limits = [
             np.min(self.mol_locations)
@@ -376,8 +381,14 @@ class SimulatedExperiment(Simulation, fit.MolCoupNanoRodExp):
         obs_points=None,
         simulation_type=None,
         simulation_file_name=None,
+        auto_quench=True,
         **kwargs
         ):
+
+        ## If not quenching molecules, tell MolCoupNanoRodExp by
+        ## setting 'for_fit' arg.
+        if not auto_quench:
+            kwargs['for_fit'] = True
 
         fit.MolCoupNanoRodExp.__init__(self,
             # obs_points=obs_points,
@@ -392,6 +403,7 @@ class SimulatedExperiment(Simulation, fit.MolCoupNanoRodExp):
             obs_points,
             simulation_type=simulation_type,
             simulation_file_name=simulation_file_name,
+            auto_quench=auto_quench,
             **kwargs
             )
         ## Get drive intensity
