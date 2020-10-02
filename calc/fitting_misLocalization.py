@@ -946,8 +946,6 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
             '''
 
         p = dipole_mag_array
-        print(f"p.shape = {p.shape}")
-        # print('Inside mb_p_fields, p= ',p)
         bfx = dipole_coordinate_array
 
         v_rel_obs_x_pts = (self.obs_points[1].ravel()[:,None] - bfx.T[0]).T
@@ -1037,12 +1035,9 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
             drive_amp=self.drive_amp,
             )
 
-        print(f"p1.shape = {p1.shape}")
-        print(f"p0_unc.shape = {p0_unc.shape}")
-
         # if type(mol_angle)==np.ndarray and mol_angle.shape[0]>1:
         p0_unc_E = self.mb_p_fields(
-            dipole_mag_array=p0_unc,
+            dipole_mag_array=np.atleast_2d(p0_unc),
             dipole_coordinate_array=d
             )
         # elif (
@@ -1055,7 +1050,6 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
         #         dipole_mag_array=p0_unc[None,:],
         #         dipole_coordinate_array=d,
         #         )
-        # print(type(mol_angle))
         return [mol_E, plas_E, p0_unc_E, p0, p1]
 
 
@@ -1279,9 +1273,6 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
             + rotated_y**2./short_quench_radius**2
             )
 
-        # print(f'long_quench_radius = {long_quench_radius}\n'+
-        #     f'short_quench_radius = {short_quench_radius}')
-
         return (rotated_ellip_eq > 1)
 
 
@@ -1296,7 +1287,7 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
         if not hasattr(self, 'mispol_angle'):
             self.calculate_polarization()
 
-        if np.asarray(self.mol_angles.ndim) < 2:
+        if np.asarray(np.atleast_1d(self.mol_angles).ndim) < 2:
             mol_angles = self.mol_angles
         else:
             mol_angles = None
@@ -1429,29 +1420,20 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         # This should really be moved to the fit method...
         self.ini_guess = ini_guess
 
-        ## Replaced the calls tpo these three class __init__s with just
-        ## a call to CoupledDipoles.__init__() on 11/21/19. Not sure if
-        ## it works yet.
-        # DipoleProperties.__init__(self, **kwargs)
-        # FittingTools.__init__(self, obs_points, **kwargs)
-        # ## pointer to DipoleProperties.__init__() to load emitter properties
-        # PlottableDipoles.__init__(self, isolate_mode, **kwargs)
         CoupledDipoles.__init__(self, **kwargs)
-
         BeamSplitter.__init__(self, **kwargs)
 
-        ## define quenching readii for smart initial guess. Attributes inherited
-        ## from DipoleProperties
-        # self.el_a = self.a_long_meters / m_per_nm
-        # self.el_c = self.a_short_meters / m_per_nm
-        ## define quenching region
+        ## Define quenching readii for smart initial guess,
+        ## attributes inherited from DipoleProperties.
         self.quel_a = self.el_a + self.fluo_quench_range
         self.quel_c = self.el_c + self.fluo_quench_range
+
 
     def fit_model_to_image_data(self,
         images=None,
         check_fit_loc=False,
-        check_ini=False
+        check_ini=False,
+        let_mol_ori_out_of_plane=False,
         ):
         ## calculate index of maximum in each image,
         ## going to use this for the initial position guess
@@ -1501,7 +1483,10 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
             ## Randomize initial molecule oriantation, maybe do something
             ## smarter later.
-            ini_mol_orientation = np.random.random(1)*np.pi/2
+            if not let_mol_ori_out_of_plane:
+                ini_mol_orientation = np.pi/2 * np.random.random(1)
+            elif let_mol_ori_out_of_plane:
+                ini_mol_orientation = np.pi/2 * np.random.random((1, 2))
             # And assign parameters for fit.
             params0 = (ini_x, ini_y, ini_mol_orientation)
 
