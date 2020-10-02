@@ -220,9 +220,9 @@ class DipoleProperties(object):
             eps_b=1
             )
 
+        self.sphere_model = sphere_model
         if self.is_sphere:
 
-            self.sphere_model = sphere_model
             if self.sphere_model == 'MLWA':
                 self.alpha1_diag_dyad = (
                     cp.sparse_ret_sphere_polarizability_Drude(
@@ -1536,7 +1536,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                 # Perform fit
                 optimized_fit = opt.least_squares(
                     self._misloc_data_minus_model, ## residual
-                    params0, ## initial guesses
+                    list(params0), ## initial guesses
                     args=tuple_normed_image_data, ## data to fit
                     )
 
