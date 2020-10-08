@@ -451,9 +451,10 @@ class FittingTools(object):
         for i in np.arange(num_of_images):
             x0 = max_positions[0][i]
             y0 = max_positions[1][i]
-            params0 = (1,x0,y0,100, 100, 0,0)
+            params0 = [1, x0, y0, 100, 100, 0, 0]
             args=tuple(images[i]/np.max(images[i]))
-            fit_gaussian = opt.least_squares(self.misloc_data_minus_model, params0, args=args)
+            fit_gaussian = opt.least_squares(
+                self.misloc_data_minus_model, params0, args=args)
             resulting_fit_params = fit_gaussian['x']
             fit_result = self.twoD_Gaussian(
                 (self.obs_points[1]/m_per_nm, self.obs_points[2]/m_per_nm), ## tuple of meshed (x,y) values
@@ -1485,10 +1486,12 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             ## smarter later.
             if not let_mol_ori_out_of_plane:
                 ini_mol_orientation = np.pi/2 * np.random.random(1)
+                params0 = [ini_x, ini_y, ini_mol_orientation]
             elif let_mol_ori_out_of_plane:
                 ini_mol_orientation = np.pi/2 * np.random.random((1, 2))
-            # And assign parameters for fit.
-            params0 = (ini_x, ini_y, ini_mol_orientation)
+                # And assign parameters for fit.
+                params0 = [ini_x, ini_y, *ini_mol_orientation.ravel()]
+                print(f"initialized params = {params0}")
 
             # Should test inital guess here, since I am only changing the
             # inital guess. Later loop on fitting could still be healpful later.
@@ -1518,7 +1521,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                     # Adjust ini_guess to be outsie quenching zone
                     print('Params modified, OG params: {}'.format(params0))
                     ini_x, ini_y = self._better_init_loc(ini_x, ini_y)
-                    params0 = (ini_x, ini_y, ini_mol_orientation)
+                    params0[:2] = ini_x, ini_y
                     print('but now they are: {}'.format(params0))
 
 
@@ -1532,11 +1535,11 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             ## Run fit unitil satisfied with molecule position
             mol_pos_accepted = False
             while mol_pos_accepted == False:
-
+                print(f"about to fit, params0 = {params0}")
                 # Perform fit
                 optimized_fit = opt.least_squares(
                     self._misloc_data_minus_model, ## residual
-                    list(params0), ## initial guesses
+                    params0, ## initial guesses
                     args=tuple_normed_image_data, ## data to fit
                     )
 
@@ -1552,7 +1555,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                 # Check molecule postion from fit
                 fit_loc = optimized_fit['x'][:2]
                 # True or false?
-                mol_not_quenched = not MolCoupNanoRodExp.mol_not_quenched(
+                mol_quenched = not MolCoupNanoRodExp.mol_not_quenched(
                     self.rod_angle,
                     fit_loc[0],
                     fit_loc[1],
@@ -1567,7 +1570,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                     # Add radius to initial guess.
                     print('OG params: {}'.format(params0))
                     ini_x, ini_y = self._better_init_loc(ini_x, ini_y)
-                    params0 = (ini_x, ini_y, ini_mol_orientation)
+                    params0[:2] = ini_x, ini_y
                     print('but now they are: {}'.format(params0))
                 elif not mol_quenched:
                     # Fit location is far enough away from rod to be
@@ -1677,9 +1680,19 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
     def raveled_model_of_params(self, fit_params):
         locations = np.array([[fit_params[0], fit_params[1], 0]])
 
+        ## np.least_squares doesn't want to take a nested list for the
+        ## 3D molecule, so here we assume that is fit_params is len = 4
+        ## then elements 2 and 3 are theta and phi
+        if len(fit_params) == 3:
+            _angle = fit_params[2]
+        elif len(fit_params) == 4:
+            _angle = np.array([[fit_params[2], fit_params[3]]])
+        else:
+            raise ValueError("Wrong number of model parameters, must "/
+             "be 3 for molecule oriented in focal plane, or 4 if 3D.")
         exp_instance = MolCoupNanoRodExp(
             locations,
-            mol_angle=fit_params[2],
+            mol_angle=_angle,
             plas_angle=self.rod_angle,
             obs_points=self.obs_points,
             for_fit=True,
