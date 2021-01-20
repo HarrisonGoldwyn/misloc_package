@@ -55,7 +55,7 @@ constants = yaml.load(opened_constant_file)
 e = constants['physical_constants']['e']
 c = constants['physical_constants']['c']  # charge of electron in statcoloumbs
 hbar = constants['physical_constants']['hbar']
-m_per_nm = constants['physical_constants']['nm']
+cm_per_nm = constants['physical_constants']['nm']
 n_a = constants['physical_constants']['nA']   # Avogadro's number
 
 # Draw the rod and ellipse
@@ -122,10 +122,10 @@ class DipoleProperties(object):
                 self.parameters['plasmon']['fit_hbar_gamma'] / hbar
                 )
             self.a_long_meters = (
-                self.parameters['plasmon']['fit_a1'] * m_per_nm
+                self.parameters['plasmon']['fit_a1'] * cm_per_nm
                 )
             self.a_short_meters = (
-                self.parameters['plasmon']['fit_a2'] * m_per_nm
+                self.parameters['plasmon']['fit_a2'] * cm_per_nm
                 )
             ## Check if Sphere
             self.true_a_un_me = self.parameters['plasmon']['true_a_unique']
@@ -133,10 +133,10 @@ class DipoleProperties(object):
                 self.is_sphere = True
             elif self.true_a_un_me is not None or self.true_a_un_me != 'None':
                 self.is_sphere = False
-                self.true_a_un_me *= m_per_nm
+                self.true_a_un_me *= cm_per_nm
 
             self.true_a_de_me = (
-                self.parameters['plasmon']['true_a_degen']*m_per_nm)
+                self.parameters['plasmon']['true_a_degen']*cm_per_nm)
             n_b = self.parameters['general']['background_ref_index']
             self.eps_b = n_b**2.
             try:## loading frmo parameter file, not previously implemented
@@ -304,7 +304,7 @@ class BeamSplitter(object):
             ## Load given parameter file.
             self.parameters = load_param_file(param_file)
             self.drive_I = np.abs(self.parameters['general']['drive_amp'])**2.
-            self.sensor_size = self.parameters['optics']['sensor_size']*m_per_nm
+            self.sensor_size = self.parameters['optics']['sensor_size']*cm_per_nm
 
 
     def powers_and_angels(self,E):
@@ -357,7 +357,7 @@ class FittingTools(object):
                 self.parameters = load_param_file(param_file)
                 # image grid resolution
                 resolution = self.parameters['optics']['sensor_pts']
-                self.sensor_size = self.parameters['optics']['sensor_size']*m_per_nm
+                self.sensor_size = self.parameters['optics']['sensor_size']*cm_per_nm
 
                 obs_points = diffi.observation_points(
                     x_min= -self.sensor_size/2,
@@ -424,7 +424,7 @@ class FittingTools(object):
         ):
         ''' fit gaussian to data '''
         gaus = self.twoD_Gaussian(
-            (self.obs_points[1]/m_per_nm, self.obs_points[2]/m_per_nm),
+            (self.obs_points[1]/cm_per_nm, self.obs_points[2]/cm_per_nm),
             *fit_params ## ( A, xo, yo, sigma_x, sigma_y, theta, offset)
             )
 
@@ -435,8 +435,8 @@ class FittingTools(object):
         apparent_centroids_idx = images.argmax(axis=-1)
         ## define locations for each maximum in physical coordinate system
 
-        x_cen = (self.obs_points[1]/m_per_nm).ravel()[apparent_centroids_idx]
-        y_cen = (self.obs_points[2]/m_per_nm).ravel()[apparent_centroids_idx]
+        x_cen = (self.obs_points[1]/cm_per_nm).ravel()[apparent_centroids_idx]
+        y_cen = (self.obs_points[2]/cm_per_nm).ravel()[apparent_centroids_idx]
 
         return [x_cen,y_cen]
 
@@ -451,13 +451,15 @@ class FittingTools(object):
         for i in np.arange(num_of_images):
             x0 = max_positions[0][i]
             y0 = max_positions[1][i]
+
             params0 = [1, x0, y0, 100, 100, 0, 0]
+
             args=tuple(images[i]/np.max(images[i]))
             fit_gaussian = opt.least_squares(
                 self.misloc_data_minus_model, params0, args=args)
             resulting_fit_params = fit_gaussian['x']
             fit_result = self.twoD_Gaussian(
-                (self.obs_points[1]/m_per_nm, self.obs_points[2]/m_per_nm), ## tuple of meshed (x,y) values
+                (self.obs_points[1]/cm_per_nm, self.obs_points[2]/cm_per_nm), ## tuple of meshed (x,y) values
                 *resulting_fit_params
                 )
             centroid_xy = resulting_fit_params[1:3]
@@ -522,24 +524,24 @@ class PlottableDipoles(DipoleProperties):
         ## Load nanoparticle radii from parameter file
         # if param_file is not None:
         #     parameters = load_param_file(param_file)
-        #     self.a_long_meters = parameters['plasmon']['fit_a1']*m_per_nm
-        #     self.a_short_meters = parameters['plasmon']['fit_a2']*m_per_nm
-        #     self.true_a_un_me = parameters['plasmon']['true_a_unique']*m_per_nm
-        #     self.true_a_de_me = parameters['plasmon']['true_a_degen']*m_per_nm
+        #     self.a_long_meters = parameters['plasmon']['fit_a1']*cm_per_nm
+        #     self.a_short_meters = parameters['plasmon']['fit_a2']*cm_per_nm
+        #     self.true_a_un_me = parameters['plasmon']['true_a_unique']*cm_per_nm
+        #     self.true_a_de_me = parameters['plasmon']['true_a_degen']*cm_per_nm
         # elif a_long_meters is not None and a_short_meters is not None:
-        #     self.a_long_meters = a_long_meters * m_per_nm
-        #     self.a_short_meters = a_short_meters * m_per_nm
+        #     self.a_long_meters = a_long_meters * cm_per_nm
+        #     self.a_short_meters = a_short_meters * cm_per_nm
         # else: raise ValueError('Need param_file or both radii')
 
         ## Define geometry of NP in plot/focal plane
-        self.el_c = self.a_short_meters / m_per_nm
+        self.el_c = self.a_short_meters / cm_per_nm
         ## Determine if disk or rod
         if self.a_long_meters > self.a_short_meters:
             ## Assume rod, so unique radius is in plane
-            self.el_a = self.a_long_meters / m_per_nm
+            self.el_a = self.a_long_meters / cm_per_nm
         elif self.a_long_meters <= self.a_short_meters:
             ## Assume disk, so unique radius is out of plot plane
-            self.el_a = self.a_short_meters / m_per_nm
+            self.el_a = self.a_short_meters / cm_per_nm
 
     def connectpoints(self, cen_x, cen_y, mol_x, mol_y, p, ax=None, zorder=1):
         x1, x2 = mol_x[p], cen_x[p]
@@ -826,7 +828,7 @@ class PlottableDipoles(DipoleProperties):
         elif self.a_long_meters <= self.a_short_meters:
             top_wedge = mpl.patches.Wedge(
                 center=(0, 0),
-                r=self.true_a_de_me/m_per_nm,
+                r=self.true_a_de_me/cm_per_nm,
                 theta1=0,
                 theta2=90,
                 facecolor=curly_nanorod_color,
@@ -1008,7 +1010,7 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
             Returns
             -------
             """
-        d = locations*m_per_nm
+        d = locations*cm_per_nm
         p0, p1 = cp.dipole_mags_gened(
             mol_angle,
             plas_angle,
@@ -1099,8 +1101,8 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
         # Filter out molecules in region of fluorescence quenching
         # self.el_a and self.el_c are now defined inside PlottingTools
         # __init__().
-        # self.el_a = self.a_long_meters / m_per_nm
-        # self.el_c = self.a_short_meters / m_per_nm
+        # self.el_a = self.a_long_meters / cm_per_nm
+        # self.el_c = self.a_short_meters / cm_per_nm
         #
         # define quenching region
         self.quel_a = self.el_a + self.fluo_quench_range
@@ -1179,7 +1181,7 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
         if plas_angle is None:
             plas_angle = self.rod_angle
 
-        d = locations*m_per_nm
+        d = locations*cm_per_nm
 
         Gd = cp.G(self.drive_energy_eV, d, np.sqrt(self.eps_b))
 
@@ -1361,8 +1363,8 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
     def plot_fields(self, ith_molecule):
         plt.figure(figsize=(3,3),dpi=600)
         plt.pcolor(
-            self.obs_points[1]/m_per_nm,
-            self.obs_points[2]/m_per_nm,
+            self.obs_points[1]/cm_per_nm,
+            self.obs_points[2]/cm_per_nm,
             (
                 self.anal_images[ith_molecule,:]
                 ).reshape(self.obs_points[1].shape)
@@ -1729,14 +1731,14 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         if ax is None:
             plt.figure(figsize=(3,3),dpi=600)
             plt.pcolor(
-                self.obs_points[-2]/m_per_nm,
-                self.obs_points[-1]/m_per_nm,
+                self.obs_points[-2]/cm_per_nm,
+                self.obs_points[-1]/cm_per_nm,
                 image.reshape(self.obs_points[-2].shape),
                 )
             plt.colorbar()
         else:
-            ax.contour(self.obs_points[-2]/m_per_nm,
-                self.obs_points[-1]/m_per_nm,
+            ax.contour(self.obs_points[-2]/cm_per_nm,
+                self.obs_points[-1]/cm_per_nm,
                 image.reshape(self.obs_points[-2].shape),
                 cmap='Greys',
                 linewidths=0.5,
@@ -1895,6 +1897,6 @@ def random_ori_mol_placement(
     return [locations, random_mol_angles_0To360]
 
 if __name__ == '__main__':
-    '''This shit is all broken, or at least um_per_nmaintained'''
+    '''This shit is all broken, or at least ucm_per_nmaintained'''
 
     print('Just sit right back while I do nothing.')
