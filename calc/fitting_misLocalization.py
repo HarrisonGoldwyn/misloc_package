@@ -1057,8 +1057,8 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
 
 
 class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
-    ''' Collect focused+diffracted far-field information from molecules
-        nearby a nanorod.
+    ''' Class responsible for modeling and plasmon-enhances single-
+        molecule imaging experiment.
         '''
     ## set up inverse mapping from observed -> true angle for signle molecule
     ## in the plane.
@@ -1082,8 +1082,19 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
         exclude_interference=False,
         **kwargs
         ):
-        """ 'for_fit' arg simply turns off auto quenching within defined
-            quenching region.
+        """
+            Args:
+                locations: list of cartesien coordinates of molecules
+                    in cm of shape = (number of molecules, 3)
+                mol_angle: if float of 1D array, interpreted as the
+                    angle of molecule in focal plane relative to x-axis
+                    . If 2D array of size (number of locations, 2),
+                    interpreted as a list of (theta, phi) coordinate pairs for each
+                plas_angle:
+                    angle of dominent dipole plasmon, for a prolate spheroid this is
+                    the long axis.
+                for_fit:  simply turns off auto quenching within defined
+                    quenching region.
             """
         # Set up instance attributes
         self.exclude_interference = exclude_interference
