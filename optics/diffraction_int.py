@@ -10,7 +10,7 @@ def observation_points(x_min, x_max, y_min, y_max, points):
     '''
     X, Y = np.mgrid[x_min:x_max:points*1j, y_min:y_max:points*1j]
     list_of_points = np.vstack([X.ravel(), Y.ravel()]).T
-    return np.array([list_of_points, X, Y])
+    return np.array([list_of_points, X, Y], dtype=object) # (Zu Edit: dtype=object)
 
 def b_arctan(y,x):
     ''' Defines aximuthal angle from x-axis increasing to 2pi counterclockize
