@@ -1,0 +1,29 @@
+fluorophore:
+  extinction_coeff: 200000.0
+  lifetime: 3.8e-09
+  mass_gamma: 0.075
+  res_energy: 2.084 ## 1240/595
+  test_gamma: 0.075
+general:
+  background_ref_index: 1.486 ## (2.209)**0.5 ## from fit
+  coupling: ff
+  drive_amp: 30.0
+  drive_energy: 2.084 ## 1240/595
+optics:
+  lens_points: 1000 
+  magnification: 1.0 
+  numerical_aperture: 1.0
+  obj_f_len: 0.2
+  sensor_size: 2000
+  sensor_pts: 100
+plasmon:
+  ## 45.2282245 , 20.13645854,  0.09593564,  2.9856273 , 47.09151229 
+  fit_eps_inf: 28.9857 ## from nrod paper
+  fit_hbar_gamma: 0.0977 ## from nrod paper
+  fit_hbar_wp: 13.5885 ## from nrod paper
+  fit_a1: 23 ## from 3 disk fit
+  fit_a2: 45.5 ## 70*1.3 / 2, ## from 3 disk fit
+  true_a_unique: 25 
+  true_a_degen: 35
+  ## This should override the quenchiing radisu
+  quench_over_real_disk: True

@@ -139,6 +139,14 @@ class DipoleProperties(object):
                 self.parameters['plasmon']['true_a_degen']*cm_per_nm)
             n_b = self.parameters['general']['background_ref_index']
             self.eps_b = n_b**2.
+
+            try: ## Checking for instructions to only quench over the real
+                ## particle.
+                self.quench_over_real_disk = (
+                    self.parameters['plasmon']['quench_over_real_disk']
+                    )
+            except: print("No 'quench_over_real_disk' param found in file.")
+
             try:## loading frmo parameter file, not previously implemented
                 ## before 11/21/19.
                 self.fluo_quench_range = (
@@ -538,9 +546,12 @@ class PlottableDipoles(DipoleProperties):
         ## Determine if disk or rod
         if self.a_long_meters > self.a_short_meters:
             ## Assume rod, so unique radius is in plane
+            self.particle_shape = 'rod'
             self.el_a = self.a_long_meters / cm_per_nm
+
         elif self.a_long_meters <= self.a_short_meters:
             ## Assume disk, so unique radius is out of plot plane
+            self.particle_shape = 'disk'
             self.el_a = self.a_short_meters / cm_per_nm
 
     def connectpoints(self, cen_x, cen_y, mol_x, mol_y, p, ax=None, zorder=1):
@@ -1116,8 +1127,8 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
         # self.el_c = self.a_short_meters / cm_per_nm
         #
         # define quenching region
-        self.quel_a = self.el_a + self.fluo_quench_range
-        self.quel_c = self.el_c + self.fluo_quench_range
+        self.quench_radius_a_nm = self.el_a + self.fluo_quench_range
+        self.quench_radius_c_nm = self.el_c + self.fluo_quench_range
         self.input_x_mol = locations[:,0]
         self.input_y_mol = locations[:,1]
         self.pt_is_in_ellip = self.mol_not_quenched()
@@ -1268,10 +1279,10 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
             input_y_mol=self.input_y_mol
 
         if long_quench_radius is None:
-            long_quench_radius=self.quel_a
+            long_quench_radius=self.quench_radius_a_nm
 
         if short_quench_radius is None:
-            short_quench_radius=self.quel_c
+            short_quench_radius=self.quench_radius_c_nm
 
         rotated_x = (
             np.cos(rod_angle)*input_x_mol
@@ -1439,8 +1450,14 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
         ## Define quenching readii for smart initial guess,
         ## attributes inherited from DipoleProperties.
-        self.quel_a = self.el_a + self.fluo_quench_range
-        self.quel_c = self.el_c + self.fluo_quench_range
+        if hasattr(self, 'quench_over_real_disk'):
+            if self.quench_over_real_disk:
+                self.quench_radius_a_nm = self.true_a_de_me / cm_per_nm
+                self.quench_radius_c_nm = self.quench_radius_a_nm
+
+        else:
+            self.quench_radius_a_nm = self.el_a + self.fluo_quench_range
+            self.quench_radius_c_nm = self.el_c + self.fluo_quench_range
 
 
     def fit_model_to_image_data(self,
@@ -1498,10 +1515,10 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             ## Randomize initial molecule oriantation, maybe do something
             ## smarter later.
             if not let_mol_ori_out_of_plane:
-                ini_mol_orientation = np.pi/2 * np.random.random(1)
+                ini_mol_orientation = np.pi * np.random.random(1)
                 params0 = [ini_x, ini_y, ini_mol_orientation]
             elif let_mol_ori_out_of_plane:
-                ini_mol_orientation = np.pi/2 * np.random.random((1, 2))
+                ini_mol_orientation = np.array([[np.pi/2, np.pi]]) * np.random.random((1, 2))
                 # And assign parameters for fit.
                 params0 = [ini_x, ini_y, *ini_mol_orientation.ravel()]
                 print(f"initialized params = {params0}")
@@ -1515,15 +1532,15 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                     self.rod_angle,
                     ini_x,
                     ini_y,
-                    self.quel_a,
-                    self.quel_c,
+                    self.quench_radius_a_nm,
+                    self.quench_radius_c_nm,
                     )
                 print(
-                    'self.rod_angle, ', self.rod_angle, '\n',
-                    'ini_x, ', ini_x, '\n',
-                    'ini_y, ', ini_y, '\n',
-                    'self.quel_a, ', self.quel_a, '\n',
-                    'self.quel_c, ', self.quel_c, '\n',
+                    # 'self.rod_angle, ', self.rod_angle, '\n',
+                    # 'ini_x, ', ini_x, '\n',
+                    # 'ini_y, ', ini_y, '\n',
+                    'self.quench_radius_a_nm, ', self.quench_radius_a_nm, '\n',
+                    'self.quench_radius_c_nm, ', self.quench_radius_c_nm, '\n',
                     )
                 print('In quenching zone? {}'.format(not ini_guess_not_quench))
                 if ini_guess_not_quench:
@@ -1532,11 +1549,10 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
                 elif not ini_guess_not_quench:
                     # Adjust ini_guess to be outsie quenching zone
-                    print('Params modified, OG params: {}'.format(params0))
+                    print(f'Initial guess in quench. Zone, OG params: {params0}')
                     ini_x, ini_y = self._better_init_loc(ini_x, ini_y)
                     params0[:2] = ini_x, ini_y
-                    print('but now they are: {}'.format(params0))
-
+                    print(f'Params shifted to: {params0}')
 
             ## Normalize images for fitting.
             a_raveled_normed_image = images[i]/np.max(images[i])
@@ -1544,20 +1560,27 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             ## Place image in tuple as required by `opt.least_squares`.
             tuple_normed_image_data = tuple(a_raveled_normed_image)
 
-
             ## Run fit unitil satisfied with molecule position
             mol_pos_accepted = False
+            fit_quenched_counter = 1
             while mol_pos_accepted == False:
-                print(f"about to fit, params0 = {params0}")
-                # Perform fit
+                print(f"about to fit with initial params = {params0}")
+                # print(f"self = {self}")
+                ## Perform fit
                 optimized_fit = opt.least_squares(
                     self._misloc_data_minus_model, ## residual
                     params0, ## initial guesses
                     args=tuple_normed_image_data, ## data to fit
                     )
+                ## Print Fit params
+                if optimized_fit['success']:
+                    print(f"Resulting fit params: {optimized_fit['x']}")
+                else:
+                    print(f"fit not converged, returning result object")
+                    return optimized_fit
 
-                # Break loop here if we don't want to iterature through smarter
-                # initial guesses.
+                ## Break loop here if we don't want to iterate through smarter
+                ## initial guesses.
                 if check_fit_loc == False:
                     # PROCEED NO FURTHER
                     break
@@ -1565,27 +1588,37 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                     # Proceed to more fits
                     pass
 
-                # Check molecule postion from fit
+                ## Check molecule postion from fit
                 fit_loc = optimized_fit['x'][:2]
-                # True or false?
-                mol_quenched = not MolCoupNanoRodExp.mol_not_quenched(
+                ## True or false?
+                fit_loc_quenched = not MolCoupNanoRodExp.mol_not_quenched(
+                    self,
                     self.rod_angle,
                     fit_loc[0],
                     fit_loc[1],
-                    self.quel_a,
-                    self.quel_c,
+                    self.quench_radius_a_nm,
+                    self.quench_radius_c_nm,
                     )
 
-                if mol_quenched:
-                    # Try fit again, but I need to figure out what to
-                    # do exactly.
+                if fit_loc_quenched:
+                    # Try fit again, but with a different initial guess.
+
                     # ~~~~~~~~~~~~~
                     # Add radius to initial guess.
-                    print('OG params: {}'.format(params0))
                     ini_x, ini_y = self._better_init_loc(ini_x, ini_y)
                     params0[:2] = ini_x, ini_y
                     print('but now they are: {}'.format(params0))
-                elif not mol_quenched:
+
+                    ## Randomize angle
+                    if not let_mol_ori_out_of_plane:
+                        params0[2] = np.pi * np.random.random(1)
+                    elif let_mol_ori_out_of_plane:
+                        params0[2:] = np.array([np.pi/2, np.pi]) * np.random.random(2)
+
+                    fit_quenched_counter += 1
+                    print(f"Begin try {fit_quenched_counter}...")
+
+                elif not fit_loc_quenched:
                     # Fit location is far enough away from rod to be
                     # reasonable
                     mol_pos_accepted = True
@@ -1598,7 +1631,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                 optimized_fit['x'][2]
                 )
 
-            self.model_fit_results[i][2] = angle_in_first_quad
+            self.model_fit_results[i][2:] = angle_in_first_quad
 
         return self.model_fit_results
 
@@ -1657,8 +1690,8 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
 
     def _polar_ellipse_semi_r(self, phi):
-        a = self.quel_a
-        c = self.quel_c
+        a = self.quench_radius_a_nm
+        c = self.quench_radius_c_nm
 
         radius = a*c/np.sqrt(
             c**2. * np.sin(phi)**2.
@@ -1733,7 +1766,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
     def plot_image_from_params(self, fit_params, ax=None):
         raveled_image = self.raveled_model_of_params(fit_params)
-        self.plot_raveled_image(raveled_image,ax)
+        self.plot_raveled_image(raveled_image, ax)
         # plt.quiver(self.mol_locations[ith_molecule, 0], self.mol_locations[ith_molecule, 1],
                    # np.cos(self.mol_angles[ith_molecule]),np.sin(self.mol_angles[ith_molecule]),
                    # color='white',pivot='middle')
@@ -1778,7 +1811,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         quiv_ax, = self.quiver_plot(
             fitted_exp_instance.mol_locations[:,0],
             fitted_exp_instance.mol_locations[:,1],
-            self.model_fit_results[:,2],
+            self.model_fit_results[:,2:],
             plot_limits,
             true_mol_angle = fitted_exp_instance.mol_angles,
             nanorod_angle = fitted_exp_instance.rod_angle,

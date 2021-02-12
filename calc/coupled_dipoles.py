@@ -695,7 +695,9 @@ def dipole_mags_gened(
         Returns dipole moment vecotrs as rows in array of shape
         (# of seperations, 3).
 
-        Could implement 3D dipoles when 'mol_angle' is 2 dimensional."""
+        Assumes 3D dipoles when 'mol_angle' is 2 dimensional,
+        interpreted as a list of (theta, phi) coordinate pairs.
+        """
 
 
     phi_1 = plas_angle ## angle of bf_p1 in lab frame
@@ -948,7 +950,7 @@ def rotate_molecule(mol_angle, alpha0_diag, E_d_angle, drive_amp):
             @
             rotation_by(+theta_0, rot_axis='y')
             )
-    ## Then rotate molecule in aximuthal direction.
+    ## Then rotate molecule about the aximuthal axis (by default of rotation_by().
     alpha_0 = rotation_by(-phi_0) @ alpha_0_p0 @ rotation_by(phi_0)
 
     return alpha_0, E_drive

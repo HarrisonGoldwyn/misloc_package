@@ -303,17 +303,43 @@ class Simulation(fit.PlottableDipoles):
         for i in range(number_of_molecules):
             print('{}th molecule'.format(int(i+1)))
             mol_location = self.mol_locations[i]
-            if np.atleast_1d(self.mol_angles).shape[0] == (
-                self.mol_locations.shape[0]
-                ):
-                mol_angle = np.atleast_1d(self.mol_angles)[i]
-            elif np.atleast_1d(self.mol_angles).shape[0] == 1:
-                mol_angle = self.mol_angles
-            mol_orientation = [
-                np.cos(mol_angle),
-                np.sin(mol_angle),
-                0.,
-                ]
+            ## Check dimension of self.mol_angles to determine if list
+            ## of (phi) or (theta, phi) values
+            if np.atleast_1d(self.mol_angles).ndim == 1:
+                ## Define orientation unitvecor of molecule in plane
+                mol_orientation = [
+                    np.cos(self.mol_angles),
+                    np.sin(self.mol_angles),
+                    0.,
+                    ]
+            elif np.atleast_1d(self.mol_angles).ndim == 2:
+                ## Define orientation unitvector in 3D
+                if self.mol_angles.shape[0] == self.mol_locations.shape[0]:
+                    ## Mol angle given exlpicitly for each mol
+                    theta = self.mol_angles[i, 0]
+                    phi = self.mol_angles[i, 1]
+
+                    mol_orientation = [
+                        np.cos(phi)*np.sin(theta),
+                        np.sin(phi)*np.sin(theta),
+                        np.cos(theta),
+                        ]
+                elif self.mol_angles.shape[0] == 1:
+                    ## One mol orientation given for each mol
+                    theta = self.mol_angles[0, 0]
+                    phi = self.mol_angles[0, 1]
+
+                    mol_orientation = [
+                        np.cos(phi)*np.sin(theta),
+                        np.sin(phi)*np.sin(theta),
+                        np.cos(theta),
+                        ]
+
+                print(f"mol_orientation = {mol_orientation}")
+            else:
+                raise ValueError(f"self.mol_angles of incorrect dimension: \n self.mol_angles = {self.mol_angles}")
+            ## If molecule angles are only given in plane
+
 
             self.matlab_cart_points_on_sph = matlab_cart_points_on_sph
             # Run BEM calculation, return fields and coords.
@@ -342,10 +368,16 @@ class Simulation(fit.PlottableDipoles):
 
             # Calculate focused+diffracted fields
             print('calculating diffracted fields')
+            ## NOTE
+            BEM_correction_reflection = np.array([[1,-1]])
+            ## I sort of remember puuting this in at some point.
+            ## I don't know why the image gets transposed in this process...
+            ## It might just be a differece in how the arrays are indexed
+            ## between BEM and python.
             diffracted_E_field = diffi.perform_integral(
                 scattered_E=self.BEM_scattered_E,
                 scattered_sph_coords=thetas_and_phis,
-                obser_pts=self.obs_points[0]*np.array([[1,-1]]),
+                obser_pts=self.obs_points[0]*BEM_correction_reflection,
                 z=0,
                 obj_f=self.obj_f,
                 tube_f=self.tube_f,
