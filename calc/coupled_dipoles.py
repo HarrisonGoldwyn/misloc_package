@@ -18,7 +18,8 @@ phys_const_file_name = '/physical_constants.yaml'
 opened_constant_file = open(
     parameter_files_path+phys_const_file_name,
     'r')
-constants = yaml.load(opened_constant_file)
+constants = yaml.load(opened_constant_file,
+                      Loader=yaml.SafeLoader) # (Zu Edit: Loader=yaml.SafeLoader)
 e = constants['physical_constants']['e']
 c = constants['physical_constants']['c']  # charge of electron in statcoloumbs
 hbar = constants['physical_constants']['hbar']
@@ -239,12 +240,12 @@ def sparse_ret_prolate_spheroid_polarizability(
         alpha_22 = alphaMW_ii(2, a_x, a_yz)
         alpha_33 = alphaMW_ii(1, a_x, a_yz)
 
-    if isolate_mode is None:
+    if isolate_mode == None:                # (Zu Edit: is -> ==)
         alpha_ij = np.array([[ alpha_11,       0.,       0.],
                              [       0., alpha_22,       0.],
                              [       0.,       0., alpha_33]])
 
-    elif isolate_mode is 'long':
+    elif isolate_mode == 'long':            # (Zu Edit: is -> ==)
         if a_x > a_yz:
             ## Keep only alpha_x for prolate
             alpha_ij = np.array([
@@ -259,7 +260,7 @@ def sparse_ret_prolate_spheroid_polarizability(
                 [       0., alpha_22,       0.],
                 [       0.,       0.,       0.]
                 ])
-    elif (isolate_mode is 'short') or (isolate_mode is 'trans'):
+    elif (isolate_mode == 'short') or (isolate_mode == 'trans'):    # (Zu Edit: is -> ==)
         if a_x > a_yz:
             alpha_ij = np.array([
                 [       0.,       0.,       0.],
@@ -755,7 +756,7 @@ def plas_dip_driven_by_mol(
     E_drive = rotation_by(E_d_angle) @ np.array([1,0,0])*drive_amp
 
     ## Build 3D molecule dipole moments
-    if mol_dipole_mag.ndim is not 1:
+    if mol_dipole_mag.ndim != 1:            # (Zu Edit: is not -> !=)
         raise TypeError(f"'mol_dipole_mag' is not dimension 1\n"+
             f"mol_dipole_mag.ndim = {mol_dipole_mag.ndim}")
 
@@ -839,9 +840,9 @@ def G(drive_hbar_w, d_col, n_b):
     dyad = np.einsum('...i,...j->...ij',n_hat,n_hat)
 
     ## If 1 seperation is given, check if multable frequencies given for spectrum
-    if d.size is not 1:
+    if d.size != 1:                                     # (Zu Edit: is not -> !=)
         d = d[...,None]
-    elif d.size is 1 and (type(k) is np.ndarray):
+    elif d.size == 1 and (type(k) is np.ndarray):       # (Zu Edit: is -> ==)
         if k.size > 1:
             k = k.reshape(((k.size,)+(dyad.ndim-1)*(1,)))
 
@@ -1392,7 +1393,7 @@ def coupled_dip_mags_focused_beam(
     k = (drive_hbar_w*n_b/hbar) / c
 
     ## Define positions with shape (num_seperations, 3)
-    if p0_position.ndim is 1:
+    if p0_position.ndim == 1:                   # (Zu Edit: is -> ==)
         p0_position = p0_position[None, :]
     p1_position = p0_position - d_col
 
@@ -1499,7 +1500,7 @@ def single_dip_mag_focused_beam(
     k = (drive_hbar_w*n_b/hbar) / c
 
     ## Define positions with shape (num_seperations, 3)
-    if p0_position.ndim is 1:
+    if p0_position.ndim == 1:                   # (Zu Edit: is -> ==)
         p0_position = p0_position[None, :]
 
     ## Buld focused beam profile

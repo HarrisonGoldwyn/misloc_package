@@ -51,7 +51,7 @@ opened_constant_file = open(
     parameter_files_path+phys_const_file_name,
     'r')
 #
-constants = yaml.load(opened_constant_file)
+constants = yaml.load(opened_constant_file, Loader=yaml.SafeLoader) # (Zu Edit: Loader=yaml.SafeLoader)
 e = constants['physical_constants']['e']
 c = constants['physical_constants']['c']  # charge of electron in statcoloumbs
 hbar = constants['physical_constants']['hbar']
@@ -74,7 +74,8 @@ def load_param_file(file_name):
         file_name = file_name+'.yaml'
     ## Load
     loaded_params = yaml.load(
-        open(parameter_files_path+file_name, 'r'))
+        open(parameter_files_path+file_name, 'r'),
+        Loader=yaml.SafeLoader) # (Zu Edit: Loader=yaml.SafeLoader)
     return loaded_params
 
 class DipoleProperties(object):
