@@ -212,6 +212,7 @@ class DipoleProperties(object):
 
             self.is_sphere = is_sphere
             self.drive_amp = drive_amp
+            self.parameters = None
 
         self.alpha0_diag_dyad = cp.sparse_polarizability_tensor(
             ## This one is a little hacky, will need to fix for proper
@@ -382,7 +383,7 @@ class FittingTools(object):
                     " or 'param_file' argument"
                     )
             else:
-                raise ValueError('Something unexpected happened')
+                raise ValueError('No obs_points or param?')
 
             self.obs_points = obs_points
         else:
@@ -519,6 +520,7 @@ class PlottableDipoles(DipoleProperties):
     a_shade_of_green = [0/255, 219/255, 1/255]
 
     def __init__(self,
+        obs_points=None,
         **kwargs
         ):
         """ Establish dipole properties as atributes for reference in plotting
@@ -555,6 +557,30 @@ class PlottableDipoles(DipoleProperties):
             self.particle_shape = 'disk'
             self.el_a = self.a_short_meters / cm_per_nm
 
+        ## Define image domain for plotting from parameter file
+        ## Load resolution from parameter file
+        if self.parameters is not None:
+            # image grid resolution
+            self.sensor_size = self.parameters['optics']['sensor_size']*cm_per_nm
+
+            self.plt_obs_points = diffi.observation_points(
+                x_min=-self.sensor_size/2,
+                x_max=self.sensor_size/2,
+                y_min=-self.sensor_size/2,
+                y_max=self.sensor_size/2,
+                points=300
+                )
+
+        elif self.parameters is None:
+            if obs_points is not None:
+                self.plt_obs_points = obs_points
+            else:
+                raise ValueError(
+                    "No 'param_file' or 'obs_pts' given to PlottableDipoles"+
+                    "I havn't implemented a way to handle that..."
+                    )
+        else:
+            raise ValueError('No obs_points or param?')
     def connectpoints(self, cen_x, cen_y, mol_x, mol_y, p, ax=None, zorder=1):
         x1, x2 = mol_x[p], cen_x[p]
         y1, y2 = mol_y[p], cen_y[p]
@@ -1465,16 +1491,32 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         images=None,
         check_fit_loc=False,
         check_ini=False,
+        max_fail_converge=10,
         let_mol_ori_out_of_plane=False,
+        return_full_fit_output=False,
+        least_squares_kwargs=None,
         ):
+        """ Returnes array of model fit parameters, unless
+                'return_full_fit_output' == True
+            then the result is that array followed by a list
+            of the dictionaries returned by 'opt.least_squares'.
+            """
+
         ## calculate index of maximum in each image,
         ## going to use this for the initial position guess
-
         if images is None:
             images = self.image_data
         ## initialize array to hold fit results for arbitrary number of images
         num_of_images = images.shape[0]
-        self.model_fit_results = np.zeros((num_of_images,3))
+        if not let_mol_ori_out_of_plane:
+            self.model_fit_results = np.zeros((num_of_images, 3))
+        elif let_mol_ori_out_of_plane:
+            self.model_fit_results = np.zeros((num_of_images, 4))
+        ## If arg 'return_full_fit_output' is True, then initialize a list
+        ## to hold outputs of fit routine. For 'opt.least_squares' this is
+        ## a dict.
+        if return_full_fit_output:
+            self.full_model_fit_results = [0,] * num_of_images
 
         ## If going to use positions of max intensity as initial guess for
         ## molecule position, calculate positions
@@ -1489,6 +1531,10 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
         ## Loop through images and fit.
         for i in np.arange(num_of_images):
+            print(f"\n")
+            print(f"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            print(f"Fitting model to molecule {i}")
+            print(f"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
             ## Establish initial guesses for molecules
 
             # If no initial guesses specified as kwarg, use pixel
@@ -1508,8 +1554,8 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                 ini_y = np.round(self.ini_guess[i, 1])
 
             print(
-                '\n','initial guess for molecule {} location: ({},{})'.format(
-                    i, ini_x, ini_y
+                'initial guess position: ({},{})'.format(
+                    ini_x, ini_y
                     )
                 )
 
@@ -1519,10 +1565,11 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                 ini_mol_orientation = np.pi * np.random.random(1)
                 params0 = [ini_x, ini_y, ini_mol_orientation]
             elif let_mol_ori_out_of_plane:
-                ini_mol_orientation = np.array([[np.pi/2, np.pi]]) * np.random.random((1, 2))
+                ini_mol_orientation = (
+                    np.array([[np.pi/2, np.pi]]) * np.random.random((1, 2)))
                 # And assign parameters for fit.
                 params0 = [ini_x, ini_y, *ini_mol_orientation.ravel()]
-                print(f"initialized params = {params0}")
+            print(f"initial guess angle = {params0[2:]}")
 
             # Should test inital guess here, since I am only changing the
             # inital guess. Later loop on fitting could still be healpful later.
@@ -1540,10 +1587,10 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                     # 'self.rod_angle, ', self.rod_angle, '\n',
                     # 'ini_x, ', ini_x, '\n',
                     # 'ini_y, ', ini_y, '\n',
-                    'self.quench_radius_a_nm, ', self.quench_radius_a_nm, '\n',
-                    'self.quench_radius_c_nm, ', self.quench_radius_c_nm, '\n',
+                    '    self.quench_radius_a_nm, ', self.quench_radius_a_nm,
+                    '    self.quench_radius_c_nm, ', self.quench_radius_c_nm,
                     )
-                print('In quenching zone? {}'.format(not ini_guess_not_quench))
+                print('    In quenching zone? {}'.format(not ini_guess_not_quench))
                 if ini_guess_not_quench:
                     # continure to fit
                     pass
@@ -1564,21 +1611,51 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             ## Run fit unitil satisfied with molecule position
             mol_pos_accepted = False
             fit_quenched_counter = 1
+            fail_to_converge_counter = 1
+
             while mol_pos_accepted == False:
-                print(f"about to fit with initial params = {params0}")
+                print(f"running fit...")
                 # print(f"self = {self}")
                 ## Perform fit
                 optimized_fit = opt.least_squares(
                     self._misloc_data_minus_model, ## residual
                     params0, ## initial guesses
                     args=tuple_normed_image_data, ## data to fit
+                    **least_squares_kwargs
                     )
-                ## Print Fit params
+
+                ## Check for fit convergence and retry if it failed for a finite
+                ## number of tries.
                 if optimized_fit['success']:
-                    print(f"Resulting fit params: {optimized_fit['x']}")
+                    print(f"SUCCESS, Resulting fit params: {optimized_fit['x']}")
                 else:
-                    print(f"fit not converged, returning result object")
-                    return optimized_fit
+                    ## try a few more times with new initial guesses
+                    if fail_to_converge_counter < max_fail_converge:
+                        print(
+                            f"FAILURE, fit not converged, randomize angle "
+                            +
+                            f"guess and try again. Unconverged counter = "
+                            +
+                            f"{fail_to_converge_counter}."
+                            )
+                        fail_to_converge_counter += 1
+                        ## Randomize angle
+                        if not let_mol_ori_out_of_plane:
+                            params0[2] = np.pi * np.random.random(1)
+                        elif let_mol_ori_out_of_plane:
+                            params0[2:] = (
+                                np.array([np.pi/2, np.pi])
+                                *
+                                np.random.random(2)
+                                )
+                        continue
+                    else:
+                        print(
+                            f"FAILURE to converge {fail_to_converge_counter} "
+                            +
+                            "times in a row, giving up."
+                            )
+                        break
 
                 ## Break loop here if we don't want to iterate through smarter
                 ## initial guesses.
@@ -1608,7 +1685,6 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                     # Add radius to initial guess.
                     ini_x, ini_y = self._better_init_loc(ini_x, ini_y)
                     params0[:2] = ini_x, ini_y
-                    print('but now they are: {}'.format(params0))
 
                     ## Randomize angle
                     if not let_mol_ori_out_of_plane:
@@ -1616,25 +1692,50 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                     elif let_mol_ori_out_of_plane:
                         params0[2:] = np.array([np.pi/2, np.pi]) * np.random.random(2)
 
+                    print('fit quenched, ini guess now: {}'.format(params0))
+
+                    print(f"Quench counter = {fit_quenched_counter}.")
+
                     fit_quenched_counter += 1
-                    print(f"Begin try {fit_quenched_counter}...")
 
                 elif not fit_loc_quenched:
                     # Fit location is far enough away from rod to be
                     # reasonable
                     mol_pos_accepted = True
+                    print(
+                        f"Fit pos. ACCEPTED as unquenched: took "
+                        +
+                        f"{fit_quenched_counter}"
+                        +
+                        " fits.")
 
             # We satisfied apparently.
             # Store fit result parameters as class instance attribute.
-            self.model_fit_results[i][:2] = optimized_fit['x'][:2]
-            # Project fit result angles to first quadrant
-            angle_in_first_quad = self.map_angles_to_first_quad(
-                optimized_fit['x'][2]
-                )
+            if optimized_fit['success']:
+                self.model_fit_results[i][:2] = optimized_fit['x'][:2]
+                # Project fit result angles to first quadrant
+                if not let_mol_ori_out_of_plane:
+                    angle_in_first_quad = self.map_angles_to_first_quad(
+                        optimized_fit['x'][2]
+                        )
+                elif let_mol_ori_out_of_plane:
+                    angle_in_first_quad = optimized_fit['x'][2:]
 
-            self.model_fit_results[i][2:] = angle_in_first_quad
+                self.model_fit_results[i][2:] = angle_in_first_quad
 
-        return self.model_fit_results
+            elif not optimized_fit['success']:
+
+                self.model_fit_results[i][:] = np.nan
+
+            if return_full_fit_output:
+                self.full_model_fit_results[i] = optimized_fit
+
+        if not return_full_fit_output:
+            return self.model_fit_results
+
+        elif return_full_fit_output:
+            return self.model_fit_results, self.full_model_fit_results
+
 
 
     def map_angles_to_first_quad(self, angles):
@@ -1724,7 +1825,10 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
         return normed_raveled_model - normed_raveled_image_data
 
-    def raveled_model_of_params(self, fit_params):
+    def raveled_model_of_params(self, fit_params, for_plot=False):
+        """ Returns raveled model image as a function of fit parameters.
+            'for_plot' uses higher res 'obs_points'.
+            """
         locations = np.array([[fit_params[0], fit_params[1], 0]])
 
         ## np.least_squares doesn't want to take a nested list for the
@@ -1737,11 +1841,15 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         else:
             raise ValueError("Wrong number of model parameters, must "/
              "be 3 for molecule oriented in focal plane, or 4 if 3D.")
+        if not for_plot:
+            obs_points = self.obs_points
+        elif for_plot:
+            obs_points = self.plt_obs_points
         exp_instance = MolCoupNanoRodExp(
             locations,
             mol_angle=_angle,
             plas_angle=self.rod_angle,
-            obs_points=self.obs_points,
+            obs_points=obs_points,
             for_fit=True,
             ## List system parameters to eliminate repetative reference
             ## to .yaml during fit routine.
@@ -1766,25 +1874,33 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         return raveled_model
 
     def plot_image_from_params(self, fit_params, ax=None):
-        raveled_image = self.raveled_model_of_params(fit_params)
+        raveled_image = self.raveled_model_of_params(
+            fit_params,
+            for_plot=True
+            )
         self.plot_raveled_image(raveled_image, ax)
         # plt.quiver(self.mol_locations[ith_molecule, 0], self.mol_locations[ith_molecule, 1],
                    # np.cos(self.mol_angles[ith_molecule]),np.sin(self.mol_angles[ith_molecule]),
                    # color='white',pivot='middle')
 
     def plot_raveled_image(self, image, ax=None):
+        if image.shape[-1] == (self.plt_obs_points[-2].shape[-1])**2:
+            obs_points = self.plt_obs_points
+        elif image.shape[-1] == (self.obs_points[-2].shape[-1])**2:
+            obs_points = self.obs_points
+
         if ax is None:
             plt.figure(figsize=(3,3),dpi=600)
             plt.pcolor(
-                self.obs_points[-2]/cm_per_nm,
-                self.obs_points[-1]/cm_per_nm,
-                image.reshape(self.obs_points[-2].shape),
+                obs_points[-2]/cm_per_nm,
+                obs_points[-1]/cm_per_nm,
+                image.reshape(obs_points[-2].shape),
                 )
             plt.colorbar()
         else:
-            ax.contour(self.obs_points[-2]/cm_per_nm,
-                self.obs_points[-1]/cm_per_nm,
-                image.reshape(self.obs_points[-2].shape),
+            ax.contour(obs_points[-2]/cm_per_nm,
+                obs_points[-1]/cm_per_nm,
+                image.reshape(obs_points[-2].shape),
                 cmap='Greys',
                 linewidths=0.5,
                 )
