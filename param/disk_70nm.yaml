@@ -2,20 +2,22 @@ fluorophore:
   extinction_coeff: 200000.0
   lifetime: 3.8e-09
   mass_gamma: 0.075
-  res_energy: 2.084 ## 1240/595
+  # res_energy: 2.084 ## 1240/635
+  res_energy: 1.95 ## 1240/635
   test_gamma: 0.075
 general:
   background_ref_index: 1.486 ## (2.209)**0.5 ## from fit
   coupling: ff
   drive_amp: 30.0
-  drive_energy: 2.084 ## 1240/595
+  drive_energy: 1.95 ## 1240/635
 optics:
   lens_points: 1000 
   magnification: 1.0 
   numerical_aperture: 1.0
   obj_f_len: 0.2
-  sensor_size: 2000
-  sensor_pts: 100
+  # sensor_size: 2720
+  sensor_size: 816
+  sensor_pts: 17
 plasmon:
   ## 45.2282245 , 20.13645854,  0.09593564,  2.9856273 , 47.09151229 
   fit_eps_inf: 28.9857 ## from nrod paper
