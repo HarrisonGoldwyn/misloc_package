@@ -1037,7 +1037,13 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
         return np.array([Ex,Ey,Ez])
 
 
-    def dipole_fields(self, locations, mol_angle=0, plas_angle=np.pi/2):
+    def dipole_fields(
+        self,
+        locations,
+        mol_angle=0,
+        plas_centroid=np.array([[0, 0, 0]]),
+        plas_angle=np.pi/2,
+        ):
         """ Calculate image fields of coupled plasmon and molecule
             dipole.
 
@@ -1048,7 +1054,11 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
             Returns
             -------
             """
-        d = locations*cm_per_nm
+        ## rel distance to mol
+        d = locations * cm_per_nm
+        ## plasmon locatiuon
+        plas_loc = plas_centroid * cm_per_nm
+        ## Get dipole mognitudes
         p0, p1 = cp.dipole_mags_gened(
             mol_angle,
             plas_angle,
@@ -1062,11 +1072,11 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
             )
         mol_E = self.mb_p_fields(
             dipole_mag_array=p0,
-            dipole_coordinate_array=d,
+            dipole_coordinate_array=d+plas_loc,
             )
         plas_E = self.mb_p_fields(
             dipole_mag_array=p1,
-            dipole_coordinate_array=np.zeros(d.shape),
+            dipole_coordinate_array=plas_loc,
             )
 
         p0_unc, = cp.uncoupled_p0(
@@ -1115,6 +1125,7 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
         self,
         locations,
         mol_angle=0,
+        plas_centroid=np.array([[0, 0, 0]]),
         plas_angle=np.pi/2,
         for_fit=False,
         exclude_interference=False,
@@ -1138,6 +1149,7 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
         self.exclude_interference = exclude_interference
         self.mol_locations = locations
         self.mol_angles = mol_angle
+        self.plas_centroid = plas_centroid
         self.rod_angle = plas_angle
 
         ## Send param_file or specified dipole params to
@@ -1179,9 +1191,10 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
             self.p0,
             self.p1
             ) = self.dipole_fields(
-                self.mol_locations,
-                self.mol_angles,
-                self.rod_angle
+                locations=self.mol_locations,
+                mol_angle=self.mol_angles,
+                plas_centroid=self.plas_centroid,
+                plas_angle=self.rod_angle,
                 )
 
         # Calcualte images
@@ -1291,7 +1304,7 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
         long_quench_radius=None,
         short_quench_radius=None,
         ):
-        '''Given molecule orientation as ('input_x_mol', 'input_y_mol'),
+        '''Given molecule location as ('input_x_mol', 'input_y_mol'),
             returns molecule locations that are outside the fluorescence
             quenching zone, defined as 10 nm from surface of fit spheroid
             '''
@@ -1453,12 +1466,12 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
     '''
     def __init__(self,
         image_data,
+        plas_centroids=None,
         ini_guess=None,
         rod_angle=None,
         **kwargs
         ):
         ## Store all input args for later
-
         self.mol_angles=0
 
         ## Rod angle is a given, for a disk this doesnt matter
@@ -1467,7 +1480,12 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         else:
             self.rod_angle = rod_angle
 
+        ## Images and presumed plasmon centroid
         self.image_data = image_data
+        if plas_centroids is None:
+            self.plas_centroids = np.zeros(image_data.shape[0], 2)
+        else:
+            self.plas_centroids = plas_centroids
 
         # This should really be moved to the fit method...
         self.ini_guess = ini_guess
@@ -1525,7 +1543,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
         # If using Gaussian centroids, calculate.
         if (self.ini_guess == 'Gauss') or (self.ini_guess == 'gauss'):
-            self.x_gau_cen, self.y_gau_cen = self.calculate_apparent_centroids(
+            self.x_gau_cen_abs, self.y_gau_cen_abs = self.calculate_apparent_centroids(
                 images
                 )
 
@@ -1546,7 +1564,11 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             # If kwarg 'Gauss' specified, use centroid of gaussian
             # localization as inilial guess
             elif (self.ini_guess == 'Gauss') or (self.ini_guess == 'gauss'):
-                ini_x, ini_y = [self.x_gau_cen[i], self.y_gau_cen[i]]
+                ## Define relative to plasmon location
+                ini_x, ini_y = [
+                    self.x_gau_cen_abs[i] - self.plas_centroids[i, 0],
+                    self.y_gau_cen_abs[i] - self.plas_centroids[i, 1]
+                    ]
 
             # Else, assume ini_guesses given as numy array.
             else:
@@ -1605,8 +1627,9 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             ## Normalize images for fitting.
             a_raveled_normed_image = images[i]/np.max(images[i])
 
-            ## Place image in tuple as required by `opt.least_squares`.
-            tuple_normed_image_data = tuple(a_raveled_normed_image)
+            ## Place image data and plasmon location in tp tuple as required
+            ## by `opt.least_squares`.
+            fit_args = (a_raveled_normed_image, self.plas_centroids[i])
 
             ## Run fit unitil satisfied with molecule position
             mol_pos_accepted = False
@@ -1620,7 +1643,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                 optimized_fit = opt.least_squares(
                     self._misloc_data_minus_model, ## residual
                     params0, ## initial guesses
-                    args=tuple_normed_image_data, ## data to fit
+                    args=fit_args, ## data to fit
                     **least_squares_kwargs
                     )
 
@@ -1707,7 +1730,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                         +
                         f"{fit_quenched_counter}"
                         +
-                        " fits.")
+                        " fit(s).")
 
             # We satisfied apparently.
             # Store fit result parameters as class instance attribute.
@@ -1763,7 +1786,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             images
             )
         # redundant, but I'm lazy and dont want to clean dependencies.
-        self.x_gau_cen, self.y_gau_cen = self.appar_cents
+        self.x_gau_cen_abs, self.y_gau_cen_abs = self.appar_cents
 
         if save_fields == False:
             del self.mol_E
@@ -1811,7 +1834,10 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         return x, y
 
 
-    def _misloc_data_minus_model(self, fit_params, *normed_raveled_image_data):
+    def _misloc_data_minus_model(self,
+        fit_params,
+        *fit_args
+        ):
         ''' fit image model to data.
             arguments;
                 fit_params = [ini_x, ini_y, ini_mol_orintation]
@@ -1819,17 +1845,31 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                 'ini_y' : units of nm from plas position
                 'ini_mol_orintation' : units of radians counter-clock from +x
         '''
+        ## Get arguments and name them
+        normed_raveled_image_data = fit_args[0]
+        plas_centroid = fit_args[1]
 
-        raveled_model = self.raveled_model_of_params(fit_params)
+        ## Define model iamge
+        raveled_model = self.raveled_model_of_params(
+            fit_params,
+            plas_centroid=plas_centroid
+            )
         normed_raveled_model = raveled_model/np.max(raveled_model)
 
         return normed_raveled_model - normed_raveled_image_data
 
-    def raveled_model_of_params(self, fit_params, for_plot=False):
+    def raveled_model_of_params(self,
+        fit_params,
+        plas_centroid,
+        for_plot=False):
         """ Returns raveled model image as a function of fit parameters.
             'for_plot' uses higher res 'obs_points'.
             """
+        ## Add z-dimension to molecule locations
         locations = np.array([[fit_params[0], fit_params[1], 0]])
+
+        ## add z-dimension to plasmon location
+        plas_centroid = np.array([[plas_centroid[0], plas_centroid[1], 0]])
 
         ## np.least_squares doesn't want to take a nested list for the
         ## 3D molecule, so here we assume that is fit_params is len = 4
@@ -1848,6 +1888,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         exp_instance = MolCoupNanoRodExp(
             locations,
             mol_angle=_angle,
+            plas_centroid=plas_centroid,
             plas_angle=self.rod_angle,
             obs_points=obs_points,
             for_fit=True,
@@ -1873,9 +1914,10 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         raveled_model = exp_instance.anal_images[0].ravel()
         return raveled_model
 
-    def plot_image_from_params(self, fit_params, ax=None):
+    def plot_image_from_params(self, fit_params, plas_centroid, ax=None):
         raveled_image = self.raveled_model_of_params(
             fit_params,
+            plas_centroid,
             for_plot=True
             )
         self.plot_raveled_image(raveled_image, ax)
@@ -1947,7 +1989,11 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
     def plot_contour_fit_over_data(self, image_idx):
             ax = self.plot_raveled_image(self.image_data[image_idx])
-            self.plot_image_from_params(self.model_fit_results[image_idx], ax)
+            self.plot_image_from_params(
+                self.model_fit_results[image_idx],
+                plas_centroid=self.plas_centroids[image_idx],
+                ax=ax)
+            return ax
 
 # Old noisy class that has depreciated. I would like to build it on top
 # of the FitModelToData class. Going to leave it here now for the reminder.
