@@ -764,20 +764,20 @@ def fig5(
         draw_quadrant=draw_quadrant)
     # paper_axs[2].set_title(None)
 
-    fit_model_instance.build_colorbar(
+    cb0 = fit_model_instance.build_colorbar(
         paper_axs[0],
         r'PBD polarization angle [$\Delta^\circ$]',
         fit.PlottableDipoles.curlycm
         )
 
-    fit_model_instance.build_colorbar(
+    cb3 = fit_model_instance.build_colorbar(
         paper_axs[3],
         'Molecule angle by model fit [deg]',
         fit.PlottableDipoles.curlycm
         )
 
     paper_axs[0].yaxis.tick_left()
-    # paper_axs[0].yaxis.set_label_position("left")
+    paper_axs[0].yaxis.set_label_position("left")
 
     # Build legends
     def loc_map_legend(ax, loc_label='fit localization'):
@@ -836,13 +836,15 @@ def fig5(
         r'Model fit molecule polarization [$\Delta^\circ$]',
         rotation=270,va="bottom")
 
-    for cbar_ax in [paper_axs[3],paper_axs[0]]:
-    #     cbar_ax.yaxis.set_ticks(np.linspace(0,np.pi/2,10))
-    #     cbar_ax.yaxis.set_ticklabels(
-    #         [r'$0$', r'$10$',r'$20$',r'$30$',r'$40$',r'$50$',r'$60$',r'$70$',r'$80$',r'$90$',]
-    #         )
-        cbar_ax.yaxis.set_ticks(np.linspace(0,np.pi/2,3))
-        cbar_ax.yaxis.set_ticklabels(
+    for cbar_ax in [cb0, cb3]:
+        # cbar_ax.yaxis.set_ticks(np.linspace(0,np.pi/2,10))
+        # cbar_ax.yaxis.set_ticklabels(
+        #     [r'$0$', r'$10$',r'$20$',r'$30$',r'$40$',r'$50$',r'$60$',r'$70$',r'$80$',r'$90$',]
+        #     )
+        cbar_ax.set_ticks(
+            [0, np.pi/4, np.pi/2]
+            )
+        cbar_ax.set_ticklabels(
             [r'$0$', r'$45$',r'$90$',]
             )
 

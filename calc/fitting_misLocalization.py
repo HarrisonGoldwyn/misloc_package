@@ -748,7 +748,7 @@ class PlottableDipoles(DipoleProperties):
             if cbar_label_str is None:
                 cbar_label_str=r'observed angle $\phi$'
 
-            self.build_colorbar(
+            cb = self.build_colorbar(
                 cbar_ax=cbar_ax,
                 cbar_label_str=cbar_label_str,
                 cmap=cmap
@@ -946,10 +946,12 @@ class PlottableDipoles(DipoleProperties):
             )
         cb1.set_label(cbar_label_str)
 
-        # cb1.set_ticks([0, np.pi/8, np.pi/4, np.pi/8 * 3, np.pi/2])
-        # cb1.set_ticklabels(
-        #     [r'$0$', r'$22.5$',r'$45$',r'$67.5$',r'$90$']
-        #     )
+        cb1.set_ticks([0, np.pi/8, np.pi/4, np.pi/8 * 3, np.pi/2])
+        cb1.set_ticklabels(
+            [r'$0$', r'$22.5$',r'$45$',r'$67.5$',r'$90$']
+            )
+
+        return cb1
 
 
     def calculate_mislocalization_magnitude(self, x_cen, y_cen, x_mol, y_mol):
