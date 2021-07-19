@@ -115,7 +115,7 @@ class Simulation(fit.PlottableDipoles):
         ):
 
         ## Get all of the system specific attributes
-        fit.DipoleProperties.__init__(self, param_file=param_file)
+        fit.PlottableDipoles.__init__(self, param_file=param_file)
         # fit.PlottableDipoles.__init__(self, param_file=param_file)
 
         self.simulation_type = simulation_type
@@ -126,11 +126,11 @@ class Simulation(fit.PlottableDipoles):
         self.mol_angles = mol_angle
         self.rod_angle = plas_angle
 
-        # #### Filtering out molecules in region of fluorescence quenching
+        #### Filtering out molecules in region of fluorescence quenching
         # self.el_a = self.a_long_meters/nm
         # self.el_c = self.a_short_meters/nm
-        # self.quel_a = self.el_a + self.fluo_quench_range ## define quenching region
-        # self.quel_c = self.el_c + self.fluo_quench_range
+        self.quel_a = self.el_a + self.fluo_quench_range ## define quenching region
+        self.quel_c = self.el_c + self.fluo_quench_range
 
         self.input_x_mol = locations[:,0]
         self.input_y_mol = locations[:,1]
@@ -740,7 +740,10 @@ def fig5(
             )
         )
     paper_axs.append(
-        paper_fig.add_subplot(spec[0, 3], sharey=paper_axs[0])
+        paper_fig.add_subplot(
+            spec[0, 3],
+            sharey=paper_axs[0]
+            )
         )
 
 
@@ -774,7 +777,7 @@ def fig5(
         )
 
     paper_axs[0].yaxis.tick_left()
-    paper_axs[0].yaxis.set_label_position("left")
+    # paper_axs[0].yaxis.set_label_position("left")
 
     # Build legends
     def loc_map_legend(ax, loc_label='fit localization'):
@@ -847,7 +850,6 @@ def fig5(
     for quiver_ax in [paper_axs[i+1] for i in range(2)]:
         quiver_ax.tick_params(direction='in'),
 
-
         # set axis equal
         # quiver_ax.axis('equal')
         # quiver_ax.set_ylim(-10,165)
@@ -865,9 +867,10 @@ def fig5(
         quiver_ax.set_xlabel(r'$x$ position [nm]')
         quiver_ax.set_ylabel(r'$y$ position [nm]')
 
-    paper_axs[2].set_ylabel(None)
+    ## Hist y-axis for axes2
+    paper_axs[2].set_ylabel('')
     # paper_axs[2].set_yticklabels([None])
-    paper_axs[2].tick_params(labelleft=False)
+    # paper_axs[2].tick_params(labelleft=False)
 
     # Things I tried to get yticklabels to show up with sharey
     # paper_axs[1].yaxis.set_tick_params(

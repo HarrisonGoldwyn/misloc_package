@@ -96,7 +96,7 @@ class DipoleProperties(object):
         fluo_ext_coef=None,
         fluo_mass_hbar_gamma=None,
         fluo_nr_hbar_gamma=None,
-        fluo_quench_region_nm=10,
+        fluo_quench_region_nm=0,
         isolate_mode=None,
         drive_energy_eV=None,
         omega_plasma=None,
@@ -369,12 +369,16 @@ class FittingTools(object):
                 resolution = self.parameters['optics']['sensor_pts']
                 self.sensor_size = self.parameters['optics']['sensor_size']*cm_per_nm
 
+                ## Define coordinate domain from center of edge pixels
+                image_width_pixel_cc = ( ## Image width minus 1 pixel
+                    self.sensor_size - self.sensor_size/resolution)
+
                 obs_points = diffi.observation_points(
-                    x_min= -self.sensor_size/2,
-                    x_max= self.sensor_size/2,
-                    y_min= -self.sensor_size/2,
-                    y_max= self.sensor_size/2,
-                    points= resolution
+                    x_min=-image_width_pixel_cc/2,
+                    x_max=image_width_pixel_cc/2,
+                    y_min=-image_width_pixel_cc/2,
+                    y_max=image_width_pixel_cc/2,
+                    points=resolution
                     )
 
             elif param_file is None:
@@ -479,7 +483,7 @@ class FittingTools(object):
         return apparent_centroids_xy.T  ## returns [x_cen(s), y_cen(s)]
 
     def image_from_E(self, E):
-        normed_I = np.sum(np.abs(E)**2.,axis=0) / self.drive_I
+        normed_I = np.sum(np.abs(E)**2., axis=0) / self.drive_I
 
         return normed_I
 
@@ -563,12 +567,18 @@ class PlottableDipoles(DipoleProperties):
             # image grid resolution
             self.sensor_size = self.parameters['optics']['sensor_size']*cm_per_nm
 
+            ## Define coordinate domain from center of edge pixels
+            plot_resolution = 300
+            image_width_pixel_cc = ( ## Image width minus 1 pixel
+                self.sensor_size - self.sensor_size/plot_resolution)
+
+
             self.plt_obs_points = diffi.observation_points(
-                x_min=-self.sensor_size/2,
-                x_max=self.sensor_size/2,
-                y_min=-self.sensor_size/2,
-                y_max=self.sensor_size/2,
-                points=300
+                x_min=-image_width_pixel_cc/2,
+                x_max=image_width_pixel_cc/2,
+                y_min=-image_width_pixel_cc/2,
+                y_max=image_width_pixel_cc/2,
+                points=plot_resolution
                 )
 
         elif self.parameters is None:
@@ -664,12 +674,13 @@ class PlottableDipoles(DipoleProperties):
         else:
             diff_angles = np.abs(angles)
 
-        pt_is_in_ellip = np.ones(x_plot.shape, dtype=bool)
+        ## Commenting this out on 07/16/21 cus it makes no sense and is breaking fig5()
+        # pt_is_in_ellip = np.ones(x_plot.shape, dtype=bool)
 
-        x_plot = x_plot[pt_is_in_ellip]
-        y_plot = y_plot[pt_is_in_ellip]
-        diff_angles = diff_angles[pt_is_in_ellip]
-        angles = angles[pt_is_in_ellip]
+        # x_plot = x_plot[pt_is_in_ellip]
+        # y_plot = y_plot[pt_is_in_ellip]
+        # diff_angles = diff_angles[pt_is_in_ellip]
+        # angles = angles[pt_is_in_ellip]
 
         if given_ax is None:
             fig, (ax0, ax_cbar) = plt.subplots(
@@ -935,10 +946,10 @@ class PlottableDipoles(DipoleProperties):
             )
         cb1.set_label(cbar_label_str)
 
-        cb1.set_ticks([0, np.pi/8, np.pi/4, np.pi/8 * 3, np.pi/2])
-        cb1.set_ticklabels(
-            [r'$0$', r'$22.5$',r'$45$',r'$67.5$',r'$90$']
-            )
+        # cb1.set_ticks([0, np.pi/8, np.pi/4, np.pi/8 * 3, np.pi/2])
+        # cb1.set_ticklabels(
+        #     [r'$0$', r'$22.5$',r'$45$',r'$67.5$',r'$90$']
+        #     )
 
 
     def calculate_mislocalization_magnitude(self, x_cen, y_cen, x_mol, y_mol):
@@ -1467,7 +1478,6 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
     def __init__(self,
         image_data,
         plas_centroids=None,
-        ini_guess=None,
         rod_angle=None,
         **kwargs
         ):
@@ -1483,12 +1493,12 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         ## Images and presumed plasmon centroid
         self.image_data = image_data
         if plas_centroids is None:
-            self.plas_centroids = np.zeros(image_data.shape[0], 2)
+            self.plas_centroids = np.zeros((image_data.shape[0], 2))
         else:
             self.plas_centroids = plas_centroids
 
-        # This should really be moved to the fit method...
-        self.ini_guess = ini_guess
+        # # This should really be moved to the fit method...
+        # self.ini_guess = ini_guess
 
         CoupledDipoles.__init__(self, **kwargs)
         BeamSplitter.__init__(self, **kwargs)
@@ -1507,12 +1517,14 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
     def fit_model_to_image_data(self,
         images=None,
+        ini_guess=None,
         check_fit_loc=False,
         check_ini=False,
         max_fail_converge=10,
         let_mol_ori_out_of_plane=False,
         return_full_fit_output=False,
-        least_squares_kwargs=None,
+        least_squares_kwargs={},
+        integral_normalize=False,
         ):
         """ Returnes array of model fit parameters, unless
                 'return_full_fit_output' == True
@@ -1538,14 +1550,16 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
         ## If going to use positions of max intensity as initial guess for
         ## molecule position, calculate positions
-        if self.ini_guess is None:
-            max_positions = self.calculate_max_xy(images)
+        if type(ini_guess) is np.ndarray:
+            pass
 
         # If using Gaussian centroids, calculate.
-        if (self.ini_guess == 'Gauss') or (self.ini_guess == 'gauss'):
+        elif (ini_guess == 'Gauss') or (ini_guess == 'gauss') or (ini_guess == 'on_edge'):
             self.x_gau_cen_abs, self.y_gau_cen_abs = self.calculate_apparent_centroids(
                 images
                 )
+        elif ini_guess is None:
+            max_positions = self.calculate_max_xy(images)
 
         ## Loop through images and fit.
         for i in np.arange(num_of_images):
@@ -1557,23 +1571,29 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
             # If no initial guesses specified as kwarg, use pixel
             # location of maximum intensity.
-            if self.ini_guess is None:
-                ini_x = np.round(max_positions[0][i])
-                ini_y = np.round(max_positions[1][i])
+            ## Assume ini_guesses given as numy array.
+            if type(ini_guess) is np.ndarray:
+                ini_x = ini_guess[i, 0]
+                ini_y = ini_guess[i, 1]
 
             # If kwarg 'Gauss' specified, use centroid of gaussian
             # localization as inilial guess
-            elif (self.ini_guess == 'Gauss') or (self.ini_guess == 'gauss'):
+            elif (ini_guess == 'Gauss') or (ini_guess == 'gauss'):
                 ## Define relative to plasmon location
                 ini_x, ini_y = [
                     self.x_gau_cen_abs[i] - self.plas_centroids[i, 0],
                     self.y_gau_cen_abs[i] - self.plas_centroids[i, 1]
                     ]
 
-            # Else, assume ini_guesses given as numy array.
-            else:
-                ini_x = np.round(self.ini_guess[i, 0])
-                ini_y = np.round(self.ini_guess[i, 1])
+            elif ini_guess == 'on_edge':
+                ini_x, ini_y = self._better_init_loc(
+                    self.x_gau_cen_abs[i] - self.plas_centroids[i, 0],
+                    self.y_gau_cen_abs[i] - self.plas_centroids[i, 1]
+                    )
+
+            elif ini_guess is None:
+                ini_x = np.round(max_positions[0][i])
+                ini_y = np.round(max_positions[1][i])
 
             print(
                 'initial guess position: ({},{})'.format(
@@ -1620,16 +1640,27 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                 elif not ini_guess_not_quench:
                     # Adjust ini_guess to be outsie quenching zone
                     print(f'Initial guess in quench. Zone, OG params: {params0}')
-                    ini_x, ini_y = self._better_init_loc(ini_x, ini_y)
+                    on_edge_x, on_edge_y = self._better_init_loc(ini_x, ini_y)
+                    ini_x += on_edge_x
+                    ini_y += on_edge_y
                     params0[:2] = ini_x, ini_y
                     print(f'Params shifted to: {params0}')
 
             ## Normalize images for fitting.
-            a_raveled_normed_image = images[i]/np.max(images[i])
+            if integral_normalize:
+                a_raveled_normed_image = images[i]/(
+                    images[i].sum()
+                    /
+                    (self.sensor_size/cm_per_nm)**2. ## A in nm
+                    )
+
+            elif not integral_normalize:
+                a_raveled_normed_image = images[i]/np.max(images[i])
+
 
             ## Place image data and plasmon location in tp tuple as required
             ## by `opt.least_squares`.
-            fit_args = (a_raveled_normed_image, self.plas_centroids[i])
+            fit_args = (a_raveled_normed_image, self.plas_centroids[i], integral_normalize)
 
             ## Run fit unitil satisfied with molecule position
             mol_pos_accepted = False
@@ -1706,7 +1737,9 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
                     # ~~~~~~~~~~~~~
                     # Add radius to initial guess.
-                    ini_x, ini_y = self._better_init_loc(ini_x, ini_y)
+                    on_edge_x, on_edge_y = self._better_init_loc(ini_x, ini_y)
+                    ini_x += on_edge_x
+                    ini_y += on_edge_y
                     params0[:2] = ini_x, ini_y
 
                     ## Randomize angle
@@ -1720,6 +1753,12 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                     print(f"Quench counter = {fit_quenched_counter}.")
 
                     fit_quenched_counter += 1
+
+                    if fit_quenched_counter > 100:
+                        ## Give up
+                        mol_pos_accepted = True
+                        print(
+                            f"Giving up, fit pos. quenched but accepted")
 
                 elif not fit_loc_quenched:
                     # Fit location is far enough away from rod to be
@@ -1799,16 +1838,13 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             particle quenching zone. Not that fillting routine
             currently (03/22/19) loops through this algorith.
             """
-
-        smarter_ini_x, smarter_ini_y = ini_x, ini_y
-
         ## Move initial guess outside quenching zone.
         #
         # Convert position to polar coords
         circ_angl = afi.phi(ini_x, ini_y)
         # sub radius with ellipse radius at given angle
         radius = self._polar_ellipse_semi_r(circ_angl)
-        # convert back to cartisean
+        # convert back to cartisean and shift guess outward by a radius
         smarter_ini_x, smarter_ini_y = self.circ_to_cart(radius, circ_angl)
 
         return smarter_ini_x, smarter_ini_y
@@ -1848,13 +1884,26 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         ## Get arguments and name them
         normed_raveled_image_data = fit_args[0]
         plas_centroid = fit_args[1]
+        if len(fit_args) == 3:
+            integral_normalize = fit_args[2]
+        elif len(fit_args) == 2:
+            integral_normalize = False
 
         ## Define model iamge
         raveled_model = self.raveled_model_of_params(
             fit_params,
             plas_centroid=plas_centroid
             )
-        normed_raveled_model = raveled_model/np.max(raveled_model)
+
+        if integral_normalize:
+            normed_raveled_model = raveled_model/(
+                raveled_model.sum()
+                /
+                (self.sensor_size/cm_per_nm)**2. ## A in cm
+                )
+
+        elif not integral_normalize:
+            normed_raveled_model = raveled_model/np.max(raveled_model)
 
         return normed_raveled_model - normed_raveled_image_data
 
@@ -1885,6 +1934,8 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             obs_points = self.obs_points
         elif for_plot:
             obs_points = self.plt_obs_points
+
+        ## Define model instance
         exp_instance = MolCoupNanoRodExp(
             locations,
             mol_angle=_angle,
@@ -1911,7 +1962,10 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             drive_amp=self.drive_amp,
             sphere_model=self.sphere_model
             )
+
+        ## Get model image
         raveled_model = exp_instance.anal_images[0].ravel()
+
         return raveled_model
 
     def plot_image_from_params(self, fit_params, plas_centroid, ax=None):
@@ -1933,10 +1987,23 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
         if ax is None:
             plt.figure(figsize=(3,3),dpi=600)
-            plt.pcolor(
-                obs_points[-2]/cm_per_nm,
-                obs_points[-1]/cm_per_nm,
-                image.reshape(obs_points[-2].shape),
+            ## Assume plotting data
+            num_pixels = obs_points[-2].shape[0]
+            pixel_width_cm = (
+                (obs_points[-2].max() - obs_points[-2].min())
+                /
+                (num_pixels - 1)
+                )
+            image_size_nm = pixel_width_cm * num_pixels / cm_per_nm
+            plt.imshow(
+                image.reshape(obs_points[-2].shape).T, ## This has to be transposed in order to match result I would get with pcolor()
+                origin='lower',
+                extent=[
+                    -image_size_nm/2,
+                    image_size_nm/2,
+                    -image_size_nm/2,
+                    image_size_nm/2
+                    ]
                 )
             plt.colorbar()
         else:
