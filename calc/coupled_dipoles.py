@@ -329,7 +329,7 @@ def short_sigma_scat_ret_pro_ellip(w, eps_inf, w_p, gamma,
 
     ## simple fix, changing k -> w*n/c
     sigma = sigma_prefactor(w, eps_b) * (
-        np.abs(alpha[1,1])**2.
+        np.abs(alpha[2,2])**2.
         )
     return sigma
 
@@ -794,29 +794,44 @@ def rotation_by(by_angle, rot_axis='z'):
     cosines = np.cos(by_angle)
     sines = np.sin(by_angle)
 
-    if rot_axis == 'z':
-        R[..., 0, 0] = cosines
-        R[..., 0, 1] = sines
-        R[..., 1, 0] = -sines
+    # if rot_axis == 'z':
+    #     R[..., 0, 0] = cosines
+    #     R[..., 0, 1] = sines
+    #     R[..., 1, 0] = -sines
+    #     R[..., 1, 1] = cosines
+    #     R[..., 2, 2] = 1
+    # elif rot_axis == 'y':
+    #     R[..., 2, 2] = cosines
+    #     R[..., 2, 0] = sines
+    #     R[..., 0, 2] = -sines
+    #     R[..., 0, 0] = cosines
+    #     R[..., 1, 1] = 1
+    # elif rot_axis == 'x':
+    #     R[..., 1, 1] = cosines
+    #     R[..., 1, 2] = sines
+    #     R[..., 2, 1] = -sines
+    #     R[..., 2, 2] = cosines
+    #     R[..., 0, 0] = 1
+
+    if rot_axis == 'x':
         R[..., 1, 1] = cosines
-        R[..., 2, 2] = 1
-    elif rot_axis == 'y':
-        R[..., 2, 2] = cosines
-        R[..., 2, 0] = sines
-        R[..., 0, 2] = -sines
-        R[..., 0, 0] = cosines
-        R[..., 1, 1] = 1
-    elif rot_axis == 'x':
-        R[..., 1, 1] = cosines
-        R[..., 1, 2] = sines
-        R[..., 2, 1] = -sines
+        R[..., 1, 2] = -sines
+        R[..., 2, 1] = sines
         R[..., 2, 2] = cosines
         R[..., 0, 0] = 1
+    elif rot_axis == 'y':
+        R[..., 0, 0] = cosines
+        R[..., 0, 2] = sines
+        R[..., 2, 0] = -sines
+        R[..., 2, 2] = cosines
+        R[..., 1, 1] = 1
+    elif rot_axis == 'z':
+        R[..., 0, 0] = cosines
+        R[..., 0, 1] = -sines
+        R[..., 1, 0] = sines
+        R[..., 1, 1] = cosines
+        R[..., 2, 2] = 1
 
-    # else:
-    #     R = np.array([[ np.cos(by_angle), np.sin(by_angle), 0],
-    #                   [-np.sin(by_angle), np.cos(by_angle), 0],
-    #                   [ 0,                0,                1]])
     return R
 
 

@@ -39,6 +39,7 @@ mpl.rcParams["lines.linewidth"]
 from ..optics import anal_foc_diff_fields as afi
 ## Coupled dipole analytics
 from . import coupled_dipoles as cp
+from . import knn
 
 ## Get path to directory for mispolariation mapping
 txt_file_path = project_path + '/txt'
@@ -361,24 +362,24 @@ class FittingTools(object):
         """
 
         if obs_points is None:
-            ## Check for given resolution
+            ## Check for given self.exp_resolution
             if param_file is not None:
                 ## Load resolution from parameter file
                 self.parameters = load_param_file(param_file)
                 # image grid resolution
-                resolution = self.parameters['optics']['sensor_pts']
+                self.exp_resolution = self.parameters['optics']['sensor_pts']
                 self.sensor_size = self.parameters['optics']['sensor_size']*cm_per_nm
 
                 ## Define coordinate domain from center of edge pixels
                 image_width_pixel_cc = ( ## Image width minus 1 pixel
-                    self.sensor_size - self.sensor_size/resolution)
+                    self.sensor_size - self.sensor_size/self.exp_resolution)
 
                 obs_points = diffi.observation_points(
                     x_min=-image_width_pixel_cc/2,
                     x_max=image_width_pixel_cc/2,
                     y_min=-image_width_pixel_cc/2,
                     y_max=image_width_pixel_cc/2,
-                    points=resolution
+                    points=self.exp_resolution
                     )
 
             elif param_file is None:
@@ -393,6 +394,7 @@ class FittingTools(object):
         else:
             ## store given
             self.obs_points = obs_points
+
 
     def twoD_Gaussian(self,
         X, ## tuple of meshed (x,y) values
@@ -487,6 +489,51 @@ class FittingTools(object):
 
         return normed_I
 
+    def bin_ndarray(self, ndarray, new_shape, operation='mean'):
+        """
+        Used for averaging model image across experimental pixels.
+
+        Bins an ndarray in all axes based on the target shape, by summing or
+            averaging.
+
+        Number of output dimensions must match number of input dimensions and
+            new axes must divide old ones.
+
+        Example
+        -------
+        >>> m = np.arange(0,100,1).reshape((10,10))
+        >>> n = bin_ndarray(m, new_shape=(5,5), operation='sum')
+        >>> print(n)
+
+        [[ 22  30  38  46  54]
+         [102 110 118 126 134]
+         [182 190 198 206 214]
+         [262 270 278 286 294]
+         [342 350 358 366 374]]
+
+        source: https://stackoverflow.com/a/29042041
+
+        """
+        operation = operation.lower()
+        if not operation in ['sum', 'mean']:
+            raise ValueError("Operation not supported.")
+        if ndarray.ndim != len(new_shape):
+            raise ValueError("Shape mismatch: {} -> {}".format(ndarray.shape,
+                                                               new_shape))
+        compression_pairs = [(d, c//d) for d,c in zip(new_shape,
+                                                      ndarray.shape)]
+        flattened = [l for p in compression_pairs for l in p]
+        ndarray = ndarray.reshape(flattened)
+        for i in range(len(new_shape)):
+            op = getattr(ndarray, operation)
+            ndarray = op(-1*(i+1))
+        return ndarray
+
+
+    def rebin(self, a, shape):
+        sh = shape[0], a.shape[0]//shape[0], shape[1], a.shape[1]//shape[1]
+        return a.reshape(sh).mean(-1).mean(1)
+
 
 class PlottableDipoles(DipoleProperties):
 
@@ -567,18 +614,18 @@ class PlottableDipoles(DipoleProperties):
             # image grid resolution
             self.sensor_size = self.parameters['optics']['sensor_size']*cm_per_nm
 
-            ## Define coordinate domain from center of edge pixels
-            plot_resolution = 300
+            ## Define coordinate domain from center of edge pixels. Must be
+            ## multiple of exp resolution for pixel averaging to work
+            self.plot_resolution = 10 * self.exp_resolution
             image_width_pixel_cc = ( ## Image width minus 1 pixel
-                self.sensor_size - self.sensor_size/plot_resolution)
-
+                self.sensor_size - self.sensor_size/self.plot_resolution)
 
             self.plt_obs_points = diffi.observation_points(
                 x_min=-image_width_pixel_cc/2,
                 x_max=image_width_pixel_cc/2,
                 y_min=-image_width_pixel_cc/2,
                 y_max=image_width_pixel_cc/2,
-                points=plot_resolution
+                points=self.plot_resolution
                 )
 
         elif self.parameters is None:
@@ -666,21 +713,10 @@ class PlottableDipoles(DipoleProperties):
         plot_ellipse=True,
         cbar_ax=None,
         cbar_label_str=None,
-        draw_quadrant=True,):
-
-        # For main quiver, plot relative mispolarization if true angle is given
-        if true_mol_angle is not None:
-            diff_angles = np.abs(angles - true_mol_angle)
-        else:
-            diff_angles = np.abs(angles)
-
-        ## Commenting this out on 07/16/21 cus it makes no sense and is breaking fig5()
-        # pt_is_in_ellip = np.ones(x_plot.shape, dtype=bool)
-
-        # x_plot = x_plot[pt_is_in_ellip]
-        # y_plot = y_plot[pt_is_in_ellip]
-        # diff_angles = diff_angles[pt_is_in_ellip]
-        # angles = angles[pt_is_in_ellip]
+        draw_quadrant=True,
+        arrow_colors=None,
+        ):
+        """ Build quiver plot of fits """
 
         if given_ax is None:
             fig, (ax0, ax_cbar) = plt.subplots(
@@ -691,33 +727,70 @@ class PlottableDipoles(DipoleProperties):
             ax0 = given_ax
 
         # cmap = mpl.cm.nipy_spectral
-        cmap = PlottableDipoles.curlycm
 
         # If true angles are given as arguments, mark them
         if true_mol_angle is not None:
-            ## mark true orientation
-            quiv_tr = ax0.quiver(
-                x_plot, y_plot, np.cos(true_mol_angle),np.sin(true_mol_angle),
-                color='black',
-                width=0.005,
-                scale=15,
-                scale_units='width',
-                pivot='mid',
-                headaxislength=0.0,
-                headlength=0.0,
-                zorder=1
-                )
+
+            ## Check to make sure angles are 1D array (assumes in-plane molecules)
+            if (np.asarray(true_mol_angle).ndim <= 1):
+
+                ## mark true orientation
+                quiv_tr = ax0.quiver(
+                    x_plot, y_plot, np.cos(true_mol_angle),np.sin(true_mol_angle),
+                    color='black',
+                    width=0.005,
+                    scale=15,
+                    scale_units='width',
+                    pivot='mid',
+                    headaxislength=0.0,
+                    headlength=0.0,
+                    zorder=1
+                    )
+            elif true_mol_angle.ndim == 2:
+                ## Assume molecule out of plane, simply mark with point
+                # quiv_tr = ax0.scatter(
+                #     x_plot, y_plot,
+                #     color='black',
+                #     # scale=15,
+                #     )
+                pass
+                ## Marking is done below
+
+        cmap = PlottableDipoles.curlycm
+        clim = [0, np.pi/2]
+
+        if arrow_colors is None:
+            ## Match arrow colors to angle in plane from horizontal
+
+            # For main quiver, plot relative mispolarization if true angle is given
+            if true_mol_angle is not None:
+                diff_angles = np.abs(angles - true_mol_angle)
+            else:
+                diff_angles = np.abs(angles)
+
+            arrow_colors = diff_angles
+            # clim = [0, np.pi/2]
 
 
+        elif type(arrow_colors) is np.ndarray:
+            ## Assume arrow colors are being encoded by angle from optical axis
+            # clim = [0, np.pi/2]
+            # cmap = PlottableDipoles.curlycm.reversed()
+            pass
+
+        elif arrow_colors == 'gray':
+            arrow_colors = [clim[0],] * len(angles)
+
+        # print(f'arrow_colors = {arrow_colors}')
         ## Mark apparent orientation
         quiv_ap = ax0.quiver(
             x_plot,
             y_plot,
             np.cos(angles),
             np.sin(angles),
-            diff_angles,
+            arrow_colors,
             cmap=cmap,
-            clim = [0, np.pi/2],
+            clim=clim,
             width=0.01,
             scale=12,
             scale_units='width',
@@ -780,23 +853,25 @@ class PlottableDipoles(DipoleProperties):
 
         ## Draw projection of model spheroid as ellipse
         if plot_ellipse==True:
-            curly_dashed_line_color = (120/255, 121/255, 118/255)
+            pass
+            # curly_dashed_line_color = (120/255, 121/255, 118/255)
 
-            if draw_quadrant is True:
-                ellip_quad = mpl.patches.Arc(
-                    (0,0),
-                    2*self.el_c,
-                    2*self.el_a,
-                    # angle=nanorod_angle*180/np.pi,
-                    theta1=0,
-                    theta2=90,
-                    # fill=False,
-                    # edgecolor='Black',
-                    edgecolor=curly_dashed_line_color,
-                    linestyle='--',
-                    linewidth=1.5
-                    )
-                ax0.add_patch(ellip_quad)
+            ## Uncomment for drawing model spheroid quadrant
+            # if draw_quadrant is True:
+            #     ellip_quad = mpl.patches.Arc(
+            #         (0,0),
+            #         2*self.el_c,
+            #         2*self.el_a,
+            #         # angle=nanorod_angle*180/np.pi,
+            #         theta1=0,
+            #         theta2=90,
+            #         # fill=False,
+            #         # edgecolor='Black',
+            #         edgecolor=curly_dashed_line_color,
+            #         linestyle='--',
+            #         linewidth=1.5
+            #         )
+            #     ax0.add_patch(ellip_quad)
 
                 # translucent_ellip = mpl.patches.Ellipse(
                 #     (0,0),
@@ -812,34 +887,35 @@ class PlottableDipoles(DipoleProperties):
                 # ax0.add_patch(translucent_ellip)
 
 
-                # Draw lines along x and y axis to finish bounding
-                # quadrant.
-                ax0.plot(
-                    [0,0],
-                    [0,self.el_a],
-                    linestyle='--',
-                    color=curly_dashed_line_color,
-                    )
-                ax0.plot(
-                    [0,self.el_c],
-                    [0,0],
-                    linestyle='--',
-                    color=curly_dashed_line_color,
-                    )
+                # # Draw lines along x and y axis to finish bounding
+                # # quadrant.
+                # ax0.plot(
+                #     [0,0],
+                #     [0,self.el_a],
+                #     linestyle='--',
+                #     color=curly_dashed_line_color,
+                #     )
+                # ax0.plot(
+                #     [0,self.el_c],
+                #     [0,0],
+                #     linestyle='--',
+                #     color=curly_dashed_line_color,
+                #     )
 
-            elif draw_quadrant is False:
-                ellip = mpl.patches.Ellipse(
-                    (0,0),
-                    2*self.el_a,
-                    2*self.el_c,
-                    angle=nanorod_angle*180/np.pi,
-                    fill=False,
-                    # edgecolor='Black',
-                    edgecolor=curly_dashed_line_color,
-                    linestyle='--',
-                    )
 
-                ax0.add_patch(ellip)
+            # elif draw_quadrant is False:
+            #     ellip = mpl.patches.Ellipse(
+            #         (0,0),
+            #         2*self.el_a,
+            #         2*self.el_c,
+            #         angle=nanorod_angle*180/np.pi,
+            #         fill=False,
+            #         # edgecolor='Black',
+            #         edgecolor=curly_dashed_line_color,
+            #         linestyle='--',
+            #         )
+
+            #     ax0.add_patch(ellip)
 
         elif plot_ellipse==False:
             pass
@@ -977,13 +1053,14 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
                     attribute.
             """
         # DipoleProperties.__init__(self, **kwargs)
-        ## Get plotting methods
-        PlottableDipoles.__init__(self, **kwargs)
         ## Send obs_points or param_file to FittingTools
         FittingTools.__init__(self, **kwargs)
         ## Regardless, will establish self.obs_points
 
-    def mb_p_fields(self, dipole_mag_array, dipole_coordinate_array):
+        ## Get plotting methods
+        PlottableDipoles.__init__(self, **kwargs)
+
+    def foc_dif_dip_fields(self, dipole_mag_array, dipole_coordinate_array):
         ''' Evaluates analytic form of focused+diffracted dipole fields
             anlong observation grid given
 
@@ -1083,11 +1160,11 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
             n_b=np.sqrt(self.eps_b),
             drive_amp=self.drive_amp,
             )
-        mol_E = self.mb_p_fields(
+        mol_E = self.foc_dif_dip_fields(
             dipole_mag_array=p0,
             dipole_coordinate_array=d+plas_loc,
             )
-        plas_E = self.mb_p_fields(
+        plas_E = self.foc_dif_dip_fields(
             dipole_mag_array=p1,
             dipole_coordinate_array=plas_loc,
             )
@@ -1100,7 +1177,7 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
             )
 
         # if type(mol_angle)==np.ndarray and mol_angle.shape[0]>1:
-        p0_unc_E = self.mb_p_fields(
+        p0_unc_E = self.foc_dif_dip_fields(
             dipole_mag_array=np.atleast_2d(p0_unc),
             dipole_coordinate_array=d
             )
@@ -1110,7 +1187,7 @@ class CoupledDipoles(PlottableDipoles, FittingTools):
         #     type(mol_angle) == np.float64 or
         #     (type(mol_angle) == np.ndarray and mol_angle.shape[0]==1)
         #     ):
-        #     p0_unc_E = self.mb_p_fields(
+        #     p0_unc_E = self.foc_dif_dip_fields(
         #         dipole_mag_array=p0_unc[None,:],
         #         dipole_coordinate_array=d,
         #         )
@@ -1142,6 +1219,7 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
         plas_angle=np.pi/2,
         for_fit=False,
         exclude_interference=False,
+        auto_calc_fiels=True,
         **kwargs
         ):
         """
@@ -1195,23 +1273,8 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
             self.mol_locations = locations
             self.mol_angles = mol_angle
 
-        # Automatically calculate fields with coupled dipoles upon
-        # instance initialization.
-        (
-            self.mol_E,
-            self.plas_E,
-            self.p0_unc_E,
-            self.p0,
-            self.p1
-            ) = self.dipole_fields(
-                locations=self.mol_locations,
-                mol_angle=self.mol_angles,
-                plas_centroid=self.plas_centroid,
-                plas_angle=self.rod_angle,
-                )
-
-        # Calcualte images
-        self.anal_images = self.image_from_E(self.mol_E + self.plas_E)
+        if auto_calc_fiels:
+            self.calculate_fields()
 
         # Calculate plot domain from molecule locations
         self.default_plot_limits = [
@@ -1239,6 +1302,24 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
                 ),
             ]
 
+    def calculate_fields(self):
+        # Automatically calculate fields with coupled dipoles upon
+        # instance initialization.
+        (
+            self.mol_E,
+            self.plas_E,
+            self.p0_unc_E,
+            self.p0,
+            self.p1
+            ) = self.dipole_fields(
+                locations=self.mol_locations,
+                mol_angle=self.mol_angles,
+                plas_centroid=self.plas_centroid,
+                plas_angle=self.rod_angle,
+                )
+
+        # Calcualte images
+        self.anal_images = self.image_from_E(self.mol_E + self.plas_E)
 
     def work_on_rod_by_mol(self,
         locations=None,
@@ -1359,6 +1440,8 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
         given_ax=None,
         plot_ellipse=True,
         draw_quadrant=True,
+        plot_mispol_map=None,
+        arrow_colors=None,
         ):
 
         if plot_limits is None: plot_limits = self.default_plot_limits
@@ -1371,10 +1454,11 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
             mol_angles = None
 
         quiv_ax, = self.quiver_plot(
-            self.mol_locations[:,0],
-            self.mol_locations[:,1],
-            self.mispol_angle,
-            plot_limits,
+            x_plot=self.mol_locations[:,0],
+            y_plot=self.mol_locations[:,1],
+            angles=self.mispol_angle,
+            plot_limits=plot_limits,
+            arrow_colors=arrow_colors,
             true_mol_angle=mol_angles,
             nanorod_angle=self.rod_angle,
             title=r'Split Pol. and Gau. Fit Loc.',
@@ -1390,6 +1474,7 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
         given_ax=None,
         plot_ellipse=True,
         draw_quadrant=True,
+        arrow_colors=None,
         ):
 
         # Compulate localizations if not already stored as cclass attrubute
@@ -1405,6 +1490,7 @@ class MolCoupNanoRodExp(CoupledDipoles, BeamSplitter):
             given_ax=given_ax,
             plot_ellipse=plot_ellipse,
             draw_quadrant=draw_quadrant,
+            arrow_colors=arrow_colors,
             )
 
         # Plot mislocalizations
@@ -1525,8 +1611,9 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         max_fail_converge=10,
         let_mol_ori_out_of_plane=False,
         return_full_fit_output=False,
-        least_squares_kwargs={},
         integral_normalize=False,
+        avg_model_over_pixels=False,
+        least_squares_kwargs={},
         ):
         """ Returnes array of model fit parameters, unless
                 'return_full_fit_output' == True
@@ -1662,7 +1749,19 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
             ## Place image data and plasmon location in tp tuple as required
             ## by `opt.least_squares`.
-            fit_args = (a_raveled_normed_image, self.plas_centroids[i], integral_normalize)
+            fit_args = (
+                a_raveled_normed_image,
+                self.plas_centroids[i],
+                integral_normalize
+                )
+
+            fit_kwargs = {}
+
+            ## If averaging model across pixels add to fit_args
+            if avg_model_over_pixels:
+                fit_kwargs['avg_model_over_pixels'] = avg_model_over_pixels
+            else:
+                pass
 
             ## Run fit unitil satisfied with molecule position
             mol_pos_accepted = False
@@ -1677,6 +1776,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                     self._misloc_data_minus_model, ## residual
                     params0, ## initial guesses
                     args=fit_args, ## data to fit
+                    kwargs=fit_kwargs,
                     **least_squares_kwargs
                     )
 
@@ -1801,7 +1901,6 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             return self.model_fit_results, self.full_model_fit_results
 
 
-
     def map_angles_to_first_quad(self, angles):
         angle_in_first_quad = np.arctan(
             np.abs(np.sin(angles))
@@ -1809,6 +1908,14 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
             np.abs(np.cos(angles))
             )
         return angle_in_first_quad
+
+    # def map_angles_to_first_two_quads(self, angles):
+    #     angle_in_first_quad = np.arctan(
+    #         np.abs(np.sin(angles))
+    #         /
+    #         np.abs(np.cos(angles))
+    #         )
+    #     return angle_in_first_quad
 
 
     def calculate_localization(self, save_fields=True, images=None,):
@@ -1874,7 +1981,8 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
 
     def _misloc_data_minus_model(self,
         fit_params,
-        *fit_args
+        *fit_args,
+        **fit_kwargs,
         ):
         ''' fit image model to data.
             arguments;
@@ -1891,11 +1999,31 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         elif len(fit_args) == 2:
             integral_normalize = False
 
-        ## Define model iamge
+        ## Get arg to determine wheter pixelated model is calculated
+        ## by averageing model across each pixel.
+        if 'avg_model_over_pixels' in fit_kwargs:
+            avg_model_over_pixels = fit_kwargs['avg_model_over_pixels']
+        else:
+            avg_model_over_pixels = False
+
+        ## Define model image, with 'for_plot' param increasing image
+        ## resolution for pixel averaging.
         raveled_model = self.raveled_model_of_params(
             fit_params,
-            plas_centroid=plas_centroid
+            plas_centroid=plas_centroid,
+            for_plot=avg_model_over_pixels
             )
+
+        if avg_model_over_pixels:
+            ## Average model over pixels.
+            ## start by reshaping image
+            image_array = raveled_model.reshape(self.plt_obs_points[-2].shape)
+            ## Perform the pixel average
+            # image_array = self.bin_ndarray(image_array, self.obs_points[-2].shape)
+            image_array = self.rebin(image_array, self.obs_points[-2].shape)
+            ## unravel again
+            raveled_model = image_array.ravel()
+
 
         if integral_normalize:
             normed_raveled_model = raveled_model/(
@@ -1912,7 +2040,8 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
     def raveled_model_of_params(self,
         fit_params,
         plas_centroid,
-        for_plot=False):
+        for_plot=False
+        ):
         """ Returns raveled model image as a function of fit parameters.
             'for_plot' uses higher res 'obs_points'.
             """
@@ -2026,6 +2155,7 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         plot_limits=None,
         given_ax=None,
         draw_quadrant=True,
+        arrow_colors=None,
         ):
         '''...'''
 
@@ -2037,15 +2167,18 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
         self.mol_angles = fitted_exp_instance.mol_angles
 
         quiv_ax, = self.quiver_plot(
-            fitted_exp_instance.mol_locations[:,0],
-            fitted_exp_instance.mol_locations[:,1],
-            self.model_fit_results[:,2:],
-            plot_limits,
+            x_plot=fitted_exp_instance.mol_locations[:,0],
+            y_plot=fitted_exp_instance.mol_locations[:,1],
+            ## For angles, grab last col, as this will be the in plane
+            ## ange regardless if model is 2d or 3d.
+            angles=self.model_fit_results[:,-1],
+            plot_limits=plot_limits,
             true_mol_angle = fitted_exp_instance.mol_angles,
             nanorod_angle = fitted_exp_instance.rod_angle,
             title=r'Model Fit Pol. and Loc.',
             given_ax=given_ax,
             draw_quadrant=draw_quadrant,
+            arrow_colors=arrow_colors,
             )
         self.scatter_centroids_wLine(
             fitted_exp_instance.mol_locations[:,0],
@@ -2064,84 +2197,6 @@ class FitModelToData(CoupledDipoles, BeamSplitter):
                 ax=ax)
             return ax
 
-# Old noisy class that has depreciated. I would like to build it on top
-# of the FitModelToData class. Going to leave it here now for the reminder.
-#
-# class FitModelToNoisedModel(FitModelToData,PlottableDipoles):
-
-#     def __init__(self, image_or_expInstance):
-#         if type(image_or_expInstance) == np.ndarray:
-#             super().__init__(image_or_expInstance)
-#         elif type(image_or_expInstance) == MolCoupNanoRodExp:
-#             super().__init__(image_or_expInstance.anal_images)
-#             self.instance_to_fit = image_or_expInstance
-
-#     def plot_image_noised(self, image, PEAK=1):
-#         noised_image_data = self.make_image_noisy(image, PEAK)
-#         self.plot_raveled_image(noised_image_data)
-
-#     def plot_image_noised_from_params(self, fit_params, PEAK=1):
-#         image = self.raveled_model_of_params(fit_params)
-#         self.plot_image_noised(image, PEAK)
-
-#     def make_image_noisy(self, image, PEAK=1):
-#         if image.ndim == 2:   ## set of raveled images
-#             max_for_norm = image.max(axis=1)[:,None]
-#         elif image.ndim == 1:
-#             max_for_norm = image.max()
-#         normed_image = image/max_for_norm
-#         noised_normded_image_data = (
-#             np.random.poisson(normed_image/255.0* PEAK) / (PEAK) *255
-#             )
-#         noised_image_data = noised_normded_image_data*max_for_norm
-#         return noised_image_data
-
-#     def make_noisy_image_attr(self, PEAK=1):
-#         if hasattr(self, 'noised_image_data'):
-#             return None
-#         noised_image_attr = self.make_image_noisy(self.image_data, PEAK)
-#         self.noised_image_data = noised_image_attr
-
-#     def fit_model_to_noised_model_image_data(self, PEAK=5000):
-#         if not hasattr(self, 'noised_image_data'):
-#             self.make_noisy_image_attr(PEAK)
-#         self.model_fit_results = self.fit_model_to_image_data(
-#             images=self.noised_image_data)
-#         return self.model_fit_results
-
-# #     def plot_fit_results(self):
-#     def plot_fit_results_as_quiver_map(
-#         self, fitted_exp_instance, plot_limits=None):
-#         '''...'''
-#         if not hasattr(self, 'model_fit_results'):
-#             self.fit_model_to_noised_model_image_data()
-#         if plot_limits is None:
-#             plot_limits = fitted_exp_instance.default_plot_limits
-#         quiv_ax, = self.quiver_plot(
-#             fitted_exp_instance.mol_locations[:,0],
-#             fitted_exp_instance.mol_locations[:,1],
-#             self.model_fit_results[:,2],
-#             plot_limits,
-#             true_mol_angle=fitted_exp_instance.mol_angles,
-#             nanorod_angle = fitted_exp_instance.rod_angle,
-#             title=r'Model Fit Pol. and Loc. w/noise',
-#             )
-#         self.scatter_centroids_wLine(
-#             fitted_exp_instance.mol_locations[:,0],
-#             fitted_exp_instance.mol_locations[:,1],
-#             self.model_fit_results[:,:2].T,
-#             quiv_ax,
-#             )
-#         return quiv_ax
-
-#     def plot_contour_fit_over_data(self, image_idx):
-#         ax = self.plot_raveled_image(self.noised_image_data[image_idx])
-#         self.plot_image_from_params(self.model_fit_results[image_idx], ax)
-
-
-# Testing fits
-
-# In[89]:
 
 def fixed_ori_mol_placement(
     x_min=0,

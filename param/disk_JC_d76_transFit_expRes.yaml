@@ -1,0 +1,29 @@
+# Only long axis spectrum fit. 
+# Radius bounded at 40 nm, otherwise both radii converge ~ 75
+fluorophore:
+  extinction_coeff: 200000.0
+  lifetime: 3.8e-09
+  mass_gamma: 0.075
+  res_energy: 2.0 ## long mode peak
+  # res_energy: 2.4 ## short mode peak
+  test_gamma: 0.075
+general:
+  background_ref_index: 1.331 ## WATER!!!
+  coupling: ff
+  drive_amp: 30.0
+  drive_energy: 2.0186 ## peak in 76 nm scattering sim
+optics:
+  lens_points: 1000 
+  magnification: 1.0 
+  numerical_aperture: 1.0
+  obj_f_len: 0.2
+  sensor_size: 824.5
+  sensor_pts: 17
+plasmon:
+  fit_eps_inf: 32.8506019
+  fit_hbar_gamma: 0.104614987
+  fit_hbar_wp: 13.9213574
+  fit_a1: 18.41135108
+  fit_a2: 49.26575881
+  true_a_unique: 15
+  true_a_degen: 35

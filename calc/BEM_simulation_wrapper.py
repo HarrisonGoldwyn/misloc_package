@@ -414,6 +414,7 @@ class SimulatedExperiment(Simulation, fit.MolCoupNanoRodExp):
         simulation_type=None,
         simulation_file_name=None,
         auto_quench=True,
+        auto_calc_fiels=False,
         **kwargs
         ):
 
@@ -425,6 +426,7 @@ class SimulatedExperiment(Simulation, fit.MolCoupNanoRodExp):
         fit.MolCoupNanoRodExp.__init__(self,
             # obs_points=obs_points,
             locations,
+            auto_calc_fiels=auto_calc_fiels,
             **kwargs
             )
 
@@ -446,6 +448,7 @@ class SimulatedExperiment(Simulation, fit.MolCoupNanoRodExp):
     def plot_mispol_map_wMisloc(self,
         plot_limits=None,
         given_ax=None,
+        plot_ellipse=False,
         **kwargs,
         ):
         """ This seams like it could cause some trouble.
@@ -456,7 +459,7 @@ class SimulatedExperiment(Simulation, fit.MolCoupNanoRodExp):
             self,
             plot_limits=plot_limits,
             given_ax=given_ax,
-            plot_ellipse=False,
+            plot_ellipse=plot_ellipse,
             **kwargs
             )
 
@@ -637,6 +640,9 @@ class LoadedFit(fit.FitModelToData, fit.PlottableDipoles):
 #             drive_energy_eV=drive_energy_eV,
             param_file=param_file
             )
+        fit.FittingTools.__init__(self,
+            param_file=param_file
+            )
         ## get plot NP radii and quenching zone
         fit.PlottableDipoles.__init__(self,
 #             isolate_mode=isolate_mode,
@@ -669,6 +675,7 @@ class LoadedFit(fit.FitModelToData, fit.PlottableDipoles):
         plot_limits=None,
         given_ax=None,
         draw_quadrant=True,
+        arrow_colors=None
         ):
 
         if fitted_exp_instance is None:
@@ -683,6 +690,7 @@ class LoadedFit(fit.FitModelToData, fit.PlottableDipoles):
             plot_limits=plot_limits,
             given_ax=given_ax,
             draw_quadrant=draw_quadrant,
+            arrow_colors=arrow_colors
             )
 
 def fig5(
@@ -885,6 +893,179 @@ def fig5(
     #     tk.set_visible(True)
 
     return [paper_axs, paper_fig]
+
+def fig5_3D(
+    sim_instance, fit_model_instance,
+    quiv_ax_limits=[-25,150,-25,150],
+    quiv_tick_list=np.linspace(0,125,6),
+    quiv_ticklabel_list=[r'$0$', r'$25$',r'$50$',r'$75$',r'$100$',r'$125$'],
+    fig_size=(6.5, 2.9),
+    draw_quadrant=True,
+    show_legend=False,
+    show_ax_labels=False,
+    **kwargs,
+    ):
+    """ Remake fig5 from mislocalization paper to accomidate 3D
+        molecule oriation. This is accompliched by taking the
+        arrow colors out of the Gaussian plot and changing the
+        color in the model plot to indicate out of plane angle.
+        """
+
+    cbar_width = 0.15
+    plot_width = 4
+    widths = [
+        # cbar_width,
+        plot_width,
+        plot_width,
+        cbar_width
+        ]
+    heights = [1]
+    gs_kw = dict(width_ratios=widths, height_ratios=heights)
+
+    paper_fig = plt.figure(
+        figsize=fig_size,
+        dpi=300,
+        constrained_layout=True,
+        )
+    spec = mpl.gridspec.GridSpec(
+        nrows=1,
+        ncols=3,
+        figure=paper_fig,
+        **gs_kw,
+        )
+
+    ## Add 3 axes to figure
+    paper_axs = []
+    paper_axs.append(paper_fig.add_subplot(spec[0, 0]))
+    paper_axs.append(paper_fig.add_subplot(spec[0, 1], sharey=paper_axs[0]))
+    paper_axs.append(paper_fig.add_subplot(spec[0, 2]))
+
+    paper_axs[0] = sim_instance.plot_mispol_map_wMisloc(
+        given_ax=paper_axs[0],
+        draw_quadrant=draw_quadrant,
+        arrow_colors='gray',
+        **kwargs
+        )
+
+    ## Place left ticks and labels on the right
+    paper_axs[0].yaxis.tick_right()
+    paper_axs[0].yaxis.set_label_position("right")
+    for tk in paper_axs[0].get_yticklabels():
+        tk.set_visible(True)
+
+    paper_axs[1] = fit_model_instance.plot_fit_results_as_quiver_map(
+        sim_instance,
+        given_ax=paper_axs[1],
+        draw_quadrant=draw_quadrant,
+        arrow_colors=map_angles_to_first_quad(
+            fit_model_instance.model_fit_results[:,-2] + np.pi/2
+            )
+        )
+
+    cb2 = fit_model_instance.build_colorbar(
+        paper_axs[2],
+        'Model fit angle from optical axis [deg]',
+        fit.PlottableDipoles.curlycm
+        )
+
+    # Build legends
+    def loc_map_legend(ax, loc_label='fit localization'):
+        legend_elements = [
+            mpl.lines.Line2D(
+                [0], [0],
+                marker='o',
+                color='w',
+                label=loc_label,
+                markerfacecolor=fit.PlottableDipoles.a_shade_of_green,
+                markersize=10
+                ),
+            mpl.lines.Line2D(
+                [0], [0],
+                marker='o',
+                color='w',
+                label='molecule location',
+                markerfacecolor='black',
+                markersize=8
+                ),
+            ]
+
+        ax.legend(
+            handles=legend_elements,
+            loc='upper right',
+            bbox_to_anchor=(1,1.11),
+    #         ncol=2, mode="expand",
+            fontsize=8,
+            framealpha=1,
+    #         loc=1
+            )
+
+    # Plot Legend
+    if show_legend:
+        loc_map_legend(paper_axs[1], loc_label='fit localization')
+
+    # Title
+    if not show_ax_labels:
+        paper_axs[0].set_title("")
+        paper_axs[0].set_title('(a)', loc='left')
+        paper_axs[1].set_title("")
+        paper_axs[1].set_title('(b)', loc='left')
+    else:
+        paper_axs[0].set_title('Gaussian Localization')
+        paper_axs[1].set_title('Image Model')
+
+
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Quick and dirty fixes
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    # rotate right colorbar label
+    paper_axs[2].set_ylabel("")
+    # paper_axs[2].yaxis.set_label_position("right")
+    paper_axs[2].set_ylabel(
+        r'Fit molecule angle out of plane [deg]',
+        rotation=270,va="bottom")
+
+    cb2.set_ticks(
+        [0, np.pi/4, np.pi/2]
+        )
+    cb2.set_ticklabels(
+        [r'$0$', r'$45$',r'$90$',]
+        )
+
+    # Redo quiver ticks
+    for quiver_ax in [paper_axs[i] for i in range(2)]:
+        quiver_ax.tick_params(direction='in'),
+
+        # set axis equal
+        # quiver_ax.axis('equal')
+        # quiver_ax.set_ylim(-10,165)
+        quiver_ax.axis(quiv_ax_limits)
+        # quiver_ax.set_ylim(quiv_ax_limits[:2])
+
+        quiver_ticks = np.linspace(0,125,5)
+        for quiver_axis in [quiver_ax.yaxis, quiver_ax.xaxis]:
+            quiver_axis.set_ticks(quiv_tick_list)
+            quiver_axis.set_ticklabels(
+                quiv_ticklabel_list
+                )
+
+        # fix labels
+        quiver_ax.set_xlabel(r'$x$ position [nm]')
+        quiver_ax.set_ylabel(
+            r'$y$ position [nm]',
+            # rotation=270,
+            # va="bottom"
+            )
+
+
+    ## Hide y-axis for axes2
+    paper_axs[0].set_ylabel('')
+    # paper_axs[0].set_yticklabels([])
+    plt.setp(paper_axs[0].get_yticklabels(), visible=False)
+
+
+    return [paper_axs, paper_fig]
+
 
 def map_angles_to_first_quad(angles):
     angle_in_first_quad = np.arctan(
